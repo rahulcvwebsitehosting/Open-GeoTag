@@ -1,295 +1,57 @@
-<p align="center">
-<img src="./GeoTagImage/image.png" alt=""/>
-</p>
+<div align="center">
 
+# GeoTagImage (GTI)
 
-<div align = "center">
-<h1 align="center"> GeoTagImage (GTI) </h1>
-<p align="center"><b>GeoTagImage</b> is a lightweight, powerful Android library designed to simplify capturing photos with embedded real-time metadata. It automatically overlays location details (Address, City, Lat/Lng), custom timestamps, author names, and even a Google Maps static preview directly onto the image.</p>
-<a href="https://www.codefactor.io/repository/github/rahulcvwebsitehosting/open-geotag/overview/master"><img src="https://www.codefactor.io/repository/github/rahulcvwebsitehosting/open-geotag/badge/master" alt="CodeFactor" /></a>
-<a href="https://jitpack.io/#rahulcvwebsitehosting/Open-GeoTag"><img src="https://jitpack.io/v/rahulcvwebsitehosting/Open-GeoTag.svg" alt=""/></a>
-<a href="(https://developer.android.com/tools/sdkmanager"><img src="https://img.shields.io/badge/android--sdk-24%2B-green" alt=""/></a>
-<a href="https://www.java.com/"><img src="https://img.shields.io/badge/compatible-java-blue" alt=""/></a>
-<a href="https://kotlinlang.org/"><img src="https://img.shields.io/badge/compatible-kotlin-blueviolet" alt=""/></a>
+A lightweight, powerful Android library for capturing photos with embedded real-time metadata — location (Address, City, Lat/Lng), timestamps, author name, and a Google Maps preview, all overlaid directly onto the image.
 
-#### Read the documentation in [docs/](docs/)
-<br/>
+[![JitPack](https://jitpack.io/v/rahulcvwebsitehosting/Open-GeoTag.svg)](https://jitpack.io/#rahulcvwebsitehosting/Open-GeoTag)
+[![Android SDK 24+](https://img.shields.io/badge/android--sdk-24%2B-green)](https://developer.android.com/tools/sdkmanager)
+[![Java](https://img.shields.io/badge/compatible-java-blue)](https://www.java.com/)
+[![Kotlin](https://img.shields.io/badge/compatible-kotlin-blueviolet)](https://kotlinlang.org/)
+
+**[Full documentation →](docs/)**
 
 </div>
 
+## Features
 
-### Key Features :
-- CameraX Integration: Seamless custom camera interface with zoom, flip, and flash support.
-- Google Maps Overlay: Embed a static map of the capture location onto the photo.
-- Smart Geocoding: Automatically fetches address, city, and country with flag emojis.
-- Fully Customizable: Adjust text size, colors, fonts, and background transparency.
-- Flexible Storage: Choose between JPEG/PNG formats and custom directory names.
-- Aspect Ratio Control: Supports 1:1 (Square), 4:3, 16:9, and Full-screen ratios.
-- EXIF Support: Writes GPS coordinates and capture metadata into the image EXIF header.
+- CameraX camera with zoom, flip, and flash
+- Google Maps overlay of the capture location
+- Smart geocoding — address, city, and country
+- Fully customizable text, colors, fonts, and transparency
+- JPEG/PNG output, custom directories, EXIF GPS metadata
+- Aspect ratios — 1:1, 4:3, 16:9, full-screen
+- Smart capture, auto-straighten, style presets, geo-tag templates
+- Photo library with recent capture history
+- Tap-to-choose location (OpenStreetMap picker)
+- Template previews on shuffled sample photos before applying a preset
 
-- Smart Capture: Automatically recommends 4:3 portrait or 16:9 landscape framing.
-- Auto Straighten: Shows a live level guide and safely corrects small camera tilt after capture.
-- Style Presets: Smart Auto, Landscape, Portrait, Square, and Field Proof configure sensible defaults in one call.
-- Editable Live Metadata: Shows the resolved current place, address, GPS coordinates, date, and time before capture.
-- Tap-to-Choose Location: Lightweight OpenStreetMap picker with manual coordinate fields as an offline fallback.
-- Geo Tag Templates: Classic, Travel Landscape, Clean Social, and Field Evidence presets.
-- Photo Library: Bottom navigation for recent capture history and all photos saved by Geo Tag Photo.
-- Responsive Photo Loading: Sampled previews, background metadata work, and cached RecyclerView thumbnails reduce UI stalls.
+## Quick Start
 
-#### Gradle
-
-Add repository in your `settings.gradle`
-
-```gradle
+```kotlin
+// settings.gradle.kts
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-    repositories {
-        maven { url "https://jitpack.io" }
-    }
-}
-```
-#### OR
-in your `settings.gradle.kts`
-```gradle
-dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-    repositories {
-        maven( url = "https://jitpack.io")
-    }
+    repositories { maven(url = "https://jitpack.io") }
 }
 
+// build.gradle.kts
+dependencies { implementation("com.github.rahulcvwebsitehosting:Open-GeoTag:<version>") }
 ```
 
-```gradle
-pluginManagement {
-    repositories {
-        google {
-            content {
-                includeGroupByRegex("com\\.android.*")
-                includeGroupByRegex("com\\.google.*")
-                includeGroupByRegex("androidx.*")
-            }
-        }
-        mavenCentral()
-        gradlePluginPortal()
-        maven( url = "https://jitpack.io")
-    }
-}
-dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-    repositories {
-        google()
-        mavenCentral()
-        maven( url = "https://jitpack.io")
-    }
-}
-```
-#### Add dependency :
+Replace `<version>` with the latest release tag from the JitPack badge above. See **[docs/](docs/)** for the full setup guide and API reference.
 
-Add dependency in your `build.gradle` (module-level) file :
+## Credits
 
-```groovy
-dependencies{
+Built and maintained by **Rahul S** — Civil Engineer & Full-Stack AI Builder.
 
-    implementation 'com.github.rahulcvwebsitehosting:Open-GeoTag:${latest_version}'
-}
-```
-#### OR
-Add dependency in your `build.gradle.kts` (module-level) file :
+- GitHub: [rahulcvwebsitehosting](https://github.com/rahulcvwebsitehosting)
+- LinkedIn: [rahulshyamcivil](https://www.linkedin.com/in/rahulshyamcivil/)
+- X / Twitter: [@RahulShyamCv](https://x.com/RahulShyamCv)
+- Instagram: [rahulcvjps](https://www.instagram.com/rahulcvjps/)
+- Threads: [@RahulCvJPS](https://www.threads.net/@RahulCvJPS)
+- WhatsApp: [Chat](https://wa.me/917305169964)
+- Email: [rahulcvfiitjee@gmail.com](mailto:rahulcvfiitjee@gmail.com)
 
-```groovy
-dependencies{
+## License
 
-    implementation("com.github.rahulcvwebsitehosting:Open-GeoTag:${latest_version}")
-}
-```
-
-#### Add file provider in AndroidManifest.xml
-```groovy
-<provider
-android:name="androidx.core.content.FileProvider"
-android:authorities="${applicationId}.provider"
-android:exported="false"
-android:grantUriPermissions="true">
-        <meta-data
-android:name="android.support.FILE_PROVIDER_PATHS"
-android:resource="@xml/provider_paths" />
-        </provider>
-
-```
-#### Create an XML file for path provider @xml/provider_path.xml
-```groovy
-<?xml version="1.0" encoding="utf-8"?>
-        <paths xmlns:android="http://schemas.android.com/apk/res/android">
-        <external-path name="external_files" path="."/>
-        </paths>
-```
-
-#### Implementation :
-Reference -> [activity_main.xml](https://github.com/rahulcvwebsitehosting/Open-GeoTag/blob/master/app/src/main/res/layout/activity_main.xml) & [MainActivity.kt](https://github.com/rahulcvwebsitehosting/Open-GeoTag/blob/master/app/src/main/java/com/geotagcv/MainActivity.kt)
-
-```kotlin
-import com.dangiashish.GeoTagImage
-import com.dangiashish.PermissionCallback
-
-
-class MainActivity : AppCompatActivity(), PermissionCallback{
-    // create global variables
-    private var gtiUri: Uri? = null
-    private lateinit var geoTagImage: GeoTagImage
-    private lateinit var cameraLauncher: ActivityResultLauncher<Uri>
-    private lateinit var permissionLauncher: ActivityResultLauncher<Array<String>>
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        
-    }
-}
-
-```
-#### onCreate() / onCreateView()
-```kotlin
-permissionLauncher = registerForActivityResult(
-    ActivityResultContracts.RequestMultiplePermissions()
-) { permissions ->
-    val allGranted = permissions.all { it.value }
-
-    if (allGranted) {
-        onPermissionGranted()
-    } else {
-        onPermissionDenied()
-    }
-}
-
-// cameraLauncher callback is required to capture the image from system camera.
-cameraLauncher =
-    registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        if (success) {
-            gtiUri = geoTagImage.processCapturedImage() // if captured via system camera
-            previewCapturedImage()
-        } else {
-            Toast.makeText(mContext, "Image capture failed", Toast.LENGTH_SHORT).show()
-        }
-    }
-```
-#### Initialization
-```kotlin
-// initialize the GeoTagImage class object with context and callback
-// use try/catch block to handle exceptions.
-geoTagImage = GeoTagImage(this, permissionLauncher, cameraLauncher) // this || context || requireContext() || requireActivity()
-geoTagImage.requestCameraAndLocationPermissions()
-
-// Recommended beginner-friendly setup
-geoTagImage.enableCameraX(true)
-geoTagImage.enableSmartCapture(true)
-geoTagImage.enableAutoStraighten(true)
-geoTagImage.setImageStyle(GeoTagImage.ImageStyle.SMART_AUTO)
-
-// Optional user-entered metadata overrides
-geoTagImage.setCustomLocation("Custom place", "Custom address", 28.6139, 77.2090)
-geoTagImage.setCustomDateTime(customCalendar.timeInMillis)
-// Call geoTagImage.clearCustomMetadata() to return to live GPS/current time.
-
-```
-#### openCamera()
-```kotlin
-     // setOnClickListener on camera button.
-binding.ivCamera.setOnClickListener {
-    geoTagImage.launchCamera(
-        onImageCaptured = { uri ->  // if captured via CameraX api
-            if (uri != null) {
-                gtiUri = uri
-                previewCapturedImage()
-            } else {
-                Toast.makeText(mContext, "Failed to capture photo", Toast.LENGTH_SHORT).show()
-            }
-        },
-        onFailure = {
-            Toast.makeText(mContext, it, Toast.LENGTH_SHORT).show()
-        }
-    )
-}
-```
-#### customize geo tags
-```kotlin
-     // set all the customizations for geotagging as per your requirements after initialization.
-
-geoTagImage.enableGTIService(false) // Enable/Disable GTI Features
-
-geoTagImage.enableCameraX(true)  // enable cameraX as default
-geoTagImage.setTextSize(30f)
-geoTagImage.setBackgroundRadius(5f)
-geoTagImage.setBackgroundColor(Color.parseColor("#66000000"))
-geoTagImage.setTextColor(Color.WHITE)
-geoTagImage.setAuthorName("Rahul")
-geoTagImage.showAuthorName(true)
-geoTagImage.showAppName(true)
-geoTagImage.setImageExtension(PNG)
-geoTagImage.setLabel("Clicked By") // Upload By || Author || Captured By
-geoTagImage.setDateFormat("yyyy-MM-dd HH:mm:ss") // default date format
-geoTagImage.setCameraAspectRatio(RATIO_1X1) // RATIO_1X1 || RATIO_4X3 || RATIO_16X9 || RATIO_FULL
-geoTagImage.setMapView(MapViewType.SATELLITE) // MapViewType.ROADMAP || MapViewType.SATELLITE || MapViewType.TERRAIN || MapViewType.HYBRID
-
-```
-
-#### preview the original image
-```kotlin
-        // preview of the original image
-private fun previewCapturedImage() {
-    gtiUri?.let { uri ->
-        binding.ivImage.let { imageView ->
-            try {
-                val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    ImageDecoder.decodeBitmap(ImageDecoder.createSource(contentResolver, uri))
-                } else {
-                    @Suppress("DEPRECATION")
-                    MediaStore.Images.Media.getBitmap(contentResolver, uri)
-                }
-                imageView.setImageBitmap(bitmap)
-                imageView.visibility = View.VISIBLE
-
-            } catch (e: Exception) {
-                Log.e(TAG, "Error loading image: ${e.message}")
-            }
-        }
-    }
-}
-```
-
-#### Permission Callbacks
-```kotlin
-override fun onPermissionGranted() {
-
-}
-
-override fun onPermissionDenied() {
-    geoTagImage.requestCameraAndLocationPermissions()
-}
-```
-
-#### LICENSE
-```
-MIT License
-
-Copyright (c) 2023-2026 Rahul S
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-        
+[MIT](LICENSE) — Copyright (c) 2023–2026 Rahul S

@@ -743,57 +743,30 @@
                     android:textColor="@color/text_secondary"
                     android:textSize="15sp" />
 
-                <com.google.android.material.button.MaterialButton
+                <include
                     android:id="@+id/templateClassic"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    layout="@layout/item_template_preview"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="22dp"
-                    android:gravity="start|center_vertical"
-                    android:minHeight="72dp"
-                    android:paddingVertical="12dp"
-                    android:text="@string/template_classic"
-                    android:textAllCaps="false"
-                    android:textSize="15sp" />
+                    android:layout_marginTop="10dp" />
 
-                <com.google.android.material.button.MaterialButton
+                <include
                     android:id="@+id/templateTravel"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    layout="@layout/item_template_preview"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:gravity="start|center_vertical"
-                    android:minHeight="72dp"
-                    android:paddingVertical="12dp"
-                    android:text="@string/template_travel"
-                    android:textAllCaps="false"
-                    android:textSize="15sp" />
+                    android:layout_height="wrap_content" />
 
-                <com.google.android.material.button.MaterialButton
+                <include
                     android:id="@+id/templateClean"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    layout="@layout/item_template_preview"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:gravity="start|center_vertical"
-                    android:minHeight="72dp"
-                    android:paddingVertical="12dp"
-                    android:text="@string/template_clean"
-                    android:textAllCaps="false"
-                    android:textSize="15sp" />
+                    android:layout_height="wrap_content" />
 
-                <com.google.android.material.button.MaterialButton
+                <include
                     android:id="@+id/templateEvidence"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    layout="@layout/item_template_preview"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:gravity="start|center_vertical"
-                    android:minHeight="72dp"
-                    android:paddingVertical="12dp"
-                    android:text="@string/template_evidence"
-                    android:textAllCaps="false"
-                    android:textSize="15sp" />
+                    android:layout_height="wrap_content" />
 
                 <TextView
                     android:id="@+id/tvActiveTemplate"

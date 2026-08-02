@@ -24,6 +24,7 @@ import android.app.TimePickerDialog
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
+import androidx.annotation.DrawableRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -35,6 +36,7 @@ import com.dangiashish.GeoTagImage.Companion.PNG
 import com.dangiashish.PermissionCallback
 import com.geotagcv.databinding.ActivityMainBinding
 import com.geotagcv.databinding.DialogSettingsBinding
+import com.geotagcv.databinding.ItemTemplatePreviewBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
@@ -136,6 +138,27 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         }
         settingsBinding.btnProjectWebsite.setOnClickListener {
             openExternalLink(R.string.credit_website_url)
+        }
+        settingsBinding.btnCreatorGithub.setOnClickListener {
+            openExternalLink(R.string.credit_creator_github_url)
+        }
+        settingsBinding.btnLinkedin.setOnClickListener {
+            openExternalLink(R.string.credit_linkedin_url)
+        }
+        settingsBinding.btnX.setOnClickListener {
+            openExternalLink(R.string.credit_x_url)
+        }
+        settingsBinding.btnInstagram.setOnClickListener {
+            openExternalLink(R.string.credit_instagram_url)
+        }
+        settingsBinding.btnThreads.setOnClickListener {
+            openExternalLink(R.string.credit_threads_url)
+        }
+        settingsBinding.btnWhatsapp.setOnClickListener {
+            openExternalLink(R.string.credit_whatsapp_url)
+        }
+        settingsBinding.btnEmail.setOnClickListener {
+            openExternalLink(R.string.credit_email_url)
         }
 
         MaterialAlertDialogBuilder(this)
@@ -507,18 +530,74 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     }
 
     private fun setupTemplates() {
-        binding.templateClassic.setOnClickListener {
+        val previewPhotos = listOf(
+            R.drawable.template_preview_1,
+            R.drawable.template_preview_2,
+            R.drawable.template_preview_3,
+            R.drawable.template_preview_4
+        ).shuffled()
+
+        configureTemplatePreview(
+            templateBinding = binding.templateClassic,
+            image = previewPhotos[0],
+            name = R.string.template_classic,
+            description = R.string.template_classic_description,
+            previewTitle = R.string.template_preview_classic_title,
+            previewMetadata = R.string.template_preview_classic_metadata
+        ) {
             applyTemplate(ImageStyle.SMART_AUTO, R.id.chipSmartAuto, R.string.template_active_classic)
         }
-        binding.templateTravel.setOnClickListener {
+        configureTemplatePreview(
+            templateBinding = binding.templateTravel,
+            image = previewPhotos[1],
+            name = R.string.template_travel,
+            description = R.string.template_travel_description,
+            previewTitle = R.string.template_preview_travel_title,
+            previewMetadata = R.string.template_preview_travel_metadata
+        ) {
             applyTemplate(ImageStyle.LANDSCAPE, R.id.chipLandscape, R.string.template_active_travel)
         }
-        binding.templateClean.setOnClickListener {
+        configureTemplatePreview(
+            templateBinding = binding.templateClean,
+            image = previewPhotos[2],
+            name = R.string.template_clean,
+            description = R.string.template_clean_description,
+            previewTitle = R.string.template_preview_clean_title,
+            previewMetadata = R.string.template_preview_clean_metadata
+        ) {
             applyTemplate(ImageStyle.SQUARE, R.id.chipSquare, R.string.template_active_clean)
         }
-        binding.templateEvidence.setOnClickListener {
+        configureTemplatePreview(
+            templateBinding = binding.templateEvidence,
+            image = previewPhotos[3],
+            name = R.string.template_evidence,
+            description = R.string.template_evidence_description,
+            previewTitle = R.string.template_preview_evidence_title,
+            previewMetadata = R.string.template_preview_evidence_metadata
+        ) {
             applyTemplate(ImageStyle.FIELD_PROOF, R.id.chipFieldProof, R.string.template_active_evidence)
         }
+    }
+
+    private fun configureTemplatePreview(
+        templateBinding: ItemTemplatePreviewBinding,
+        @DrawableRes image: Int,
+        @StringRes name: Int,
+        @StringRes description: Int,
+        @StringRes previewTitle: Int,
+        @StringRes previewMetadata: Int,
+        onSelected: () -> Unit
+    ) {
+        templateBinding.ivTemplatePhoto.setImageResource(image)
+        templateBinding.tvTemplateName.setText(name)
+        templateBinding.tvTemplateDescription.setText(description)
+        templateBinding.tvPreviewTitle.setText(previewTitle)
+        templateBinding.tvPreviewMetadata.setText(previewMetadata)
+        templateBinding.root.contentDescription = getString(
+            R.string.template_card_description,
+            getString(name)
+        )
+        templateBinding.root.setOnClickListener { onSelected() }
     }
 
     private fun applyTemplate(style: ImageStyle, chipId: Int, @StringRes label: Int) {

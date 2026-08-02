@@ -104,12 +104,20 @@
     <string name="privacy_and_terms">Privacy and terms</string>
     <string name="privacy_policy">Privacy policy</string>
     <string name="terms_of_use">Terms of use</string>
-    <string name="creator_credits">Creator credits</string>
-    <string name="created_by">Created by Rahul S</string>
-    <string name="creator_helper">Official project and creator links</string>
-    <string name="github_profile">GitHub profile</string>
-    <string name="project_repository">Project repository</string>
-    <string name="project_website">Project website</string>
+    <string name="creator_credits">Project credits</string>
+    <string name="created_by">Rahul S — Civil Engineer &amp; Full-Stack AI Builder</string>
+    <string name="creator_helper">Official Open-GeoTag project and creator links</string>
+    <string name="github_profile">Open-GeoTag project repository</string>
+    <string name="project_repository">Project documentation</string>
+    <string name="project_website">Download latest APK</string>
+    <string name="social_media">Creator social links</string>
+    <string name="creator_github">GitHub • rahulcvwebsitehosting</string>
+    <string name="linkedin">LinkedIn • rahulshyamcivil</string>
+    <string name="x_twitter">X / Twitter • @RahulShyamCv</string>
+    <string name="instagram">Instagram • rahulcvjps</string>
+    <string name="threads">Threads • @RahulCvJPS</string>
+    <string name="whatsapp">WhatsApp</string>
+    <string name="email">Email • rahulcvfiitjee@gmail.com</string>
     <string name="done">Done</string>
     <string name="no_browser_available">No browser is available to open this link</string>
     <string name="no_gallery_available">No photo viewer is available</string>
@@ -118,11 +126,26 @@
     <string name="nav_recent">Recent</string>
     <string name="nav_saved">Saved</string>
     <string name="templates_title">Geo tag templates</string>
-    <string name="templates_helper">Pick a ready-made layout. The app applies the recommended photo style, map, and metadata automatically.</string>
-    <string name="template_classic">Classic geo tag\nPlace, address, date, coordinates and satellite map</string>
-    <string name="template_travel">Travel landscape\nWide photo, date, coordinates and terrain map</string>
-    <string name="template_clean">Clean social\nSquare photo with a simple place and date stamp</string>
-    <string name="template_evidence">Field evidence\nDate, GPS coordinates and hybrid map for records</string>
+    <string name="templates_helper">Preview each geo tag on a sample photo, then tap the card to apply its recommended settings.</string>
+    <string name="template_classic">Classic geo tag</string>
+    <string name="template_classic_description">Place, address, date, coordinates and satellite map.</string>
+    <string name="template_travel">Travel landscape</string>
+    <string name="template_travel_description">Wide framing with location, date and terrain map.</string>
+    <string name="template_clean">Clean social</string>
+    <string name="template_clean_description">A square photo with a simple place and date stamp.</string>
+    <string name="template_evidence">Field evidence</string>
+    <string name="template_evidence_description">Date, GPS coordinates and hybrid map for records.</string>
+    <string name="template_sample_photo">Sample photo showing the geo tag placement</string>
+    <string name="use_this_template">Use this template</string>
+    <string name="template_card_description">Preview and use %1$s template</string>
+    <string name="template_preview_classic_title">Jhunjhunu, Rajasthan, India</string>
+    <string name="template_preview_classic_metadata">Bakara–Patusari Bypass\n28.046755, 75.434587 • 02 Aug 2026</string>
+    <string name="template_preview_travel_title">Rajasthan, India</string>
+    <string name="template_preview_travel_metadata">Landscape • Terrain map • 02 Aug 2026</string>
+    <string name="template_preview_clean_title">Jhunjhunu</string>
+    <string name="template_preview_clean_metadata">02 Aug 2026 • 04:45 PM</string>
+    <string name="template_preview_evidence_title">FIELD RECORD • GPS VERIFIED</string>
+    <string name="template_preview_evidence_metadata">28.046755, 75.434587\n02 Aug 2026 • 04:45 PM</string>
     <string name="template_active_classic">Active template: Classic geo tag</string>
     <string name="template_active_travel">Active template: Travel landscape</string>
     <string name="template_active_clean">Active template: Clean social</string>
@@ -135,9 +158,16 @@
     <string name="saved_photos_helper">All photos saved by this app. Tap one to open it.</string>
     <string name="saved_photos_empty">No Geo Tag Photo images were found on this device.</string>
     <string name="open_saved_photo_description">Open saved photo %1$s</string>
-    <string name="credit_github_profile_url" translatable="false">https://github.com/rahulcvwebsitehosting</string>
-    <string name="credit_repository_url" translatable="false">https://github.com/rahulcvwebsitehosting/Open-GeoTag</string>
-    <string name="credit_website_url" translatable="false">https://github.com/rahulcvwebsitehosting/Open-GeoTag/blob/master/docs/README.md</string>
+    <string name="credit_github_profile_url" translatable="false">https://github.com/rahulcvwebsitehosting/Open-GeoTag</string>
+    <string name="credit_repository_url" translatable="false">https://github.com/rahulcvwebsitehosting/Open-GeoTag/tree/main/docs</string>
+    <string name="credit_website_url" translatable="false">https://github.com/rahulcvwebsitehosting/Open-GeoTag/releases/latest</string>
+    <string name="credit_creator_github_url" translatable="false">https://github.com/rahulcvwebsitehosting</string>
+    <string name="credit_linkedin_url" translatable="false">https://www.linkedin.com/in/rahulshyamcivil/</string>
+    <string name="credit_x_url" translatable="false">https://x.com/RahulShyamCv</string>
+    <string name="credit_instagram_url" translatable="false">https://www.instagram.com/rahulcvjps/</string>
+    <string name="credit_threads_url" translatable="false">https://www.threads.net/@RahulCvJPS</string>
+    <string name="credit_whatsapp_url" translatable="false">https://wa.me/917305169964</string>
+    <string name="credit_email_url" translatable="false">mailto:rahulcvfiitjee@gmail.com</string>
     <string name="privacy_policy_body">Geo Tag Photo needs Camera and Location permissions to create geotagged photos.\n\nCaptured photos, recent-history references, selected date and time, and location details are processed on your device and saved to storage you control. This app does not require an account and does not include advertising or analytics SDKs.\n\nAndroid and Google Play location services may provide the device location. The system geocoder may turn coordinates into a place or address. The Choose on map screen loads OpenStreetMap tiles over the internet. When Map preview is enabled and a Google Maps API key is configured, coordinates are sent to the Google Maps Static API to create the map image. Those services handle requests under their own privacy policies.\n\nYou can edit or clear place, address, coordinates, date, and time before capture. You can revoke permissions at any time in Android Settings; features that require those permissions will stop working.\n\nThis policy describes the current app build and may be updated when its features change.</string>
     <string name="terms_of_use_body">Use Geo Tag Photo only where you have permission to capture, store, and share images. You are responsible for following local laws and respecting other people and private property.\n\nLocation, address, date, and time can be detected automatically or edited manually. Accuracy is not guaranteed, and edited metadata must not be treated as independent proof of where or when a photo was taken.\n\nThe app is provided as is, without warranties. You are responsible for reviewing photos and metadata before relying on or sharing them. Third-party location, geocoding, and mapping services are subject to their own terms.\n\nBy using the app, you agree to these terms.</string>
 </resources>

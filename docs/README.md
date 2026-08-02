@@ -69,11 +69,13 @@ dependencyResolutionManagement {
 
 ### 2. Add Dependency
 
+Replace `<version>` with the latest release tag shown in the JitPack badge on the main README.
+
 In your module-level `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.rahulcvwebsitehosting:Open-GeoTag:${latest_version}")
+    implementation("com.github.rahulcvwebsitehosting:Open-GeoTag:<version>")
 }
 ```
 
@@ -81,7 +83,7 @@ Or in `build.gradle`:
 
 ```groovy
 dependencies {
-    implementation 'com.github.rahulcvwebsitehosting:Open-GeoTag:${latest_version}'
+    implementation 'com.github.rahulcvwebsitehosting:Open-GeoTag:<version>'
 }
 ```
 

@@ -41,4 +41,5 @@
     <color name="recommendation_stroke">#CAC4D0</color>
     <color name="dark_scrim">#B3000000</color>
     <color name="dark_circle">#99000000</color>
+    <color name="template_preview_overlay">#D91D1B20</color>
 </resources>

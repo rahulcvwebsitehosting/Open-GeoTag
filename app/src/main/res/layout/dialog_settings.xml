@@ -170,6 +170,125 @@
             app:iconPadding="16dp"
             app:iconTint="@color/smart_green_dark" />
 
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="12dp"
+            android:background="@color/card_stroke" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/social_media"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCreatorGithub"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:gravity="center_vertical|start"
+            android:text="@string/creator_github"
+            android:textAllCaps="false"
+            android:textColor="@color/text_primary"
+            app:icon="@drawable/ic_open_in_new_24"
+            app:iconGravity="textStart"
+            app:iconPadding="16dp"
+            app:iconTint="@color/smart_green_dark" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnLinkedin"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:gravity="center_vertical|start"
+            android:text="@string/linkedin"
+            android:textAllCaps="false"
+            android:textColor="@color/text_primary"
+            app:icon="@drawable/ic_open_in_new_24"
+            app:iconGravity="textStart"
+            app:iconPadding="16dp"
+            app:iconTint="@color/smart_green_dark" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnX"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:gravity="center_vertical|start"
+            android:text="@string/x_twitter"
+            android:textAllCaps="false"
+            android:textColor="@color/text_primary"
+            app:icon="@drawable/ic_open_in_new_24"
+            app:iconGravity="textStart"
+            app:iconPadding="16dp"
+            app:iconTint="@color/smart_green_dark" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnInstagram"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:gravity="center_vertical|start"
+            android:text="@string/instagram"
+            android:textAllCaps="false"
+            android:textColor="@color/text_primary"
+            app:icon="@drawable/ic_open_in_new_24"
+            app:iconGravity="textStart"
+            app:iconPadding="16dp"
+            app:iconTint="@color/smart_green_dark" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnThreads"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:gravity="center_vertical|start"
+            android:text="@string/threads"
+            android:textAllCaps="false"
+            android:textColor="@color/text_primary"
+            app:icon="@drawable/ic_open_in_new_24"
+            app:iconGravity="textStart"
+            app:iconPadding="16dp"
+            app:iconTint="@color/smart_green_dark" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnWhatsapp"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:gravity="center_vertical|start"
+            android:text="@string/whatsapp"
+            android:textAllCaps="false"
+            android:textColor="@color/text_primary"
+            app:icon="@drawable/ic_open_in_new_24"
+            app:iconGravity="textStart"
+            app:iconPadding="16dp"
+            app:iconTint="@color/smart_green_dark" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnEmail"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:gravity="center_vertical|start"
+            android:text="@string/email"
+            android:textAllCaps="false"
+            android:textColor="@color/text_primary"
+            app:icon="@drawable/ic_open_in_new_24"
+            app:iconGravity="textStart"
+            app:iconPadding="16dp"
+            app:iconTint="@color/smart_green_dark" />
+
     </LinearLayout>
 
 </androidx.core.widget.NestedScrollView>

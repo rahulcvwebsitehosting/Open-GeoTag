@@ -29,14 +29,15 @@ def create_master(size: int = 1024) -> Image.Image:
     decoration = decoration.filter(ImageFilter.GaussianBlur(18))
     image = Image.alpha_composite(image.convert("RGBA"), decoration)
 
+    symbol = Image.new("RGBA", image.size, (0, 0, 0, 0))
     shadow = Image.new("RGBA", image.size, (0, 0, 0, 0))
     shadow_draw = ImageDraw.Draw(shadow)
     shadow_draw.rounded_rectangle((174, 350, 850, 774), radius=112, fill=(20, 10, 70, 105))
     shadow_draw.rounded_rectangle((332, 270, 670, 435), radius=62, fill=(20, 10, 70, 105))
     shadow = shadow.filter(ImageFilter.GaussianBlur(34))
-    image = Image.alpha_composite(image, shadow)
+    symbol = Image.alpha_composite(symbol, shadow)
 
-    draw = ImageDraw.Draw(image)
+    draw = ImageDraw.Draw(symbol)
     draw.rounded_rectangle((170, 324, 854, 748), radius=108, fill=(255, 255, 255, 255))
     draw.rounded_rectangle((315, 246, 694, 432), radius=70, fill=(255, 255, 255, 255))
     draw.rounded_rectangle((720, 382, 814, 448), radius=24, fill=(103, 80, 164, 255))
@@ -46,6 +47,12 @@ def create_master(size: int = 1024) -> Image.Image:
     draw.ellipse((350, 350, 674, 674), fill=coral)
     draw.ellipse((428, 428, 596, 596), fill=(79, 55, 139, 255))
     draw.ellipse((463, 456, 513, 506), fill=(255, 255, 255, 178))
+    symbol_size = round(size * 0.78)
+    symbol = symbol.resize((symbol_size, symbol_size), Image.Resampling.LANCZOS)
+    symbol_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    offset = (size - symbol_size) // 2
+    symbol_layer.alpha_composite(symbol, (offset, offset))
+    image = Image.alpha_composite(image, symbol_layer)
     return image
 
 
