@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:clipToPadding="false"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="24dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="8dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="@null"
+                android:src="@mipmap/ic_launcher" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings"
+                    android:textColor="@color/text_primary"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/settings_helper"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/privacy_and_terms"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnPrivacy"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:layout_marginTop="4dp"
+            android:gravity="center_vertical|start"
+            android:text="@string/privacy_policy"
+            android:textColor="@color/text_primary"
+            android:textAllCaps="false"
+            app:icon="@drawable/ic_privacy_24"
+            app:iconGravity="textStart"
+            app:iconPadding="16dp"
+            app:iconTint="@color/smart_green_dark" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnTerms"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:gravity="center_vertical|start"
+            android:text="@string/terms_of_use"
+            android:textColor="@color/text_primary"
+            android:textAllCaps="false"
+            app:icon="@drawable/ic_description_24"
+            app:iconGravity="textStart"
+            app:iconPadding="16dp"
+            app:iconTint="@color/smart_green_dark" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="12dp"
+            android:background="@color/card_stroke" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/creator_credits"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/created_by"
+            android:textColor="@color/text_primary"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/creator_helper"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnGithubProfile"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical|start"
+            android:text="@string/github_profile"
+            android:textColor="@color/text_primary"
+            android:textAllCaps="false"
+            app:icon="@drawable/ic_open_in_new_24"
+            app:iconGravity="textStart"
+            app:iconPadding="16dp"
+            app:iconTint="@color/smart_green_dark" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnProjectRepository"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:gravity="center_vertical|start"
+            android:text="@string/project_repository"
+            android:textColor="@color/text_primary"
+            android:textAllCaps="false"
+            app:icon="@drawable/ic_open_in_new_24"
+            app:iconGravity="textStart"
+            app:iconPadding="16dp"
+            app:iconTint="@color/smart_green_dark" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnProjectWebsite"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:gravity="center_vertical|start"
+            android:text="@string/project_website"
+            android:textColor="@color/text_primary"
+            android:textAllCaps="false"
+            app:icon="@drawable/ic_open_in_new_24"
+            app:iconGravity="textStart"
+            app:iconPadding="16dp"
+            app:iconTint="@color/smart_green_dark" />
+
+    </LinearLayout>
+
+</androidx.core.widget.NestedScrollView>

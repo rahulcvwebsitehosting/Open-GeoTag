@@ -1,0 +1,107 @@
+<!--
+  ~ MIT License
+  ~
+  ~ Copyright (c) 2023-2026 Rahul S
+  ~
+  ~ Permission is hereby granted, free of charge, to any person obtaining a copy
+  ~ of this software and associated documentation files (the "Software"), to deal
+  ~ in the Software without restriction, including without limitation the rights
+  ~ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  ~ copies of the Software, and to permit persons to whom the Software is
+  ~ furnished to do so, subject to the following conditions:
+  ~
+  ~ The above copyright notice and this permission notice shall be included in all
+  ~ copies or substantial portions of the Software.
+  ~
+  ~ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  ~ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  ~ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  ~ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  ~ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  ~ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  ~ SOFTWARE.
+  -->
+
+<resources>
+    <string name="app_name">Geo Tag Photo</string>
+    <string name="hello_blank_fragment">Hello blank fragment</string>
+    <string name="smart_capture_label">SMART CAPTURE</string>
+    <string name="home_headline">Point. Frame. Done.</string>
+    <string name="home_subtitle">The camera chooses the ratio, detects landscape shots, and keeps your photo level.</string>
+    <string name="captured_photo_preview">Captured photo preview</string>
+    <string name="ready_when_you_are">Ready when you are</string>
+    <string name="smart_auto_configured">Smart Auto is already configured</string>
+    <string name="clear_photo_preview">Clear photo preview</string>
+    <string name="open_smart_camera">Open smart camera</string>
+    <string name="smart_recommendations">Smart recommendations</string>
+    <string name="style_helper">Choose a style, or leave Smart Auto selected.</string>
+    <string name="style_smart_auto">Smart Auto • Recommended</string>
+    <string name="style_landscape">Landscape</string>
+    <string name="style_portrait">Portrait</string>
+    <string name="style_square">Square</string>
+    <string name="style_field_proof">Field proof</string>
+    <string name="recommendation_auto_title">Recommended • Smart Auto</string>
+    <string name="recommendation_auto_body">Portrait uses 4:3, landscape switches to 16:9, and the horizon is corrected automatically.</string>
+    <string name="recommendation_landscape_title">Recommended • Landscape 16:9</string>
+    <string name="recommendation_landscape_body">Best for scenery and wide site photos. Terrain map and level correction are selected.</string>
+    <string name="recommendation_portrait_title">Recommended • Portrait 4:3</string>
+    <string name="recommendation_portrait_body">Balanced vertical framing with date, coordinates, satellite map, and auto alignment.</string>
+    <string name="recommendation_square_title">Recommended • Square 1:1</string>
+    <string name="recommendation_square_body">A centered social-ready crop. Map and raw coordinates are hidden to keep it clean.</string>
+    <string name="recommendation_field_title">Recommended • Field proof 4:3</string>
+    <string name="recommendation_field_body">Keeps date, GPS coordinates, and a hybrid map for inspections and evidence photos.</string>
+    <string name="manual_control_title">Manual control</string>
+    <string name="manual_control_body">Your current framing is kept. Open Advanced settings to adjust image details.</string>
+    <string name="advanced_collapsed">Advanced settings  +</string>
+    <string name="advanced_expanded">Advanced settings  −</string>
+    <string name="auto_straighten_recommended">Auto-straighten (recommended)</string>
+    <string name="date_and_time">Date and time</string>
+    <string name="gps_coordinates">GPS coordinates</string>
+    <string name="map_preview">Map preview</string>
+    <string name="photographer_name">Photographer name</string>
+    <string name="app_name_option">App name</string>
+    <string name="smart_camera_name">Geo Tag Photo</string>
+    <string name="album_name">Album name</string>
+    <string name="default_album_name">Geo Tag Photo</string>
+    <string name="file_format">File format</string>
+    <string name="jpeg_recommended">JPEG • Recommended</string>
+    <string name="png">PNG</string>
+    <string name="map_style">Map style</string>
+    <string name="satellite_recommended">Satellite • Recommended</string>
+    <string name="hybrid">Hybrid</string>
+    <string name="terrain">Terrain</string>
+    <string name="roadmap">Roadmap</string>
+    <string name="saved_successfully">Saved successfully</string>
+    <string name="photo_insight">%1$s • %2$s • Smart aligned</string>
+    <string name="edit_location_time">Edit location and time</string>
+    <string name="edit_location_time_helper">Leave a field blank to keep the detected GPS value.</string>
+    <string name="custom_place">Place or city</string>
+    <string name="custom_address">Address</string>
+    <string name="latitude">Latitude</string>
+    <string name="longitude">Longitude</string>
+    <string name="choose_date">Choose date</string>
+    <string name="choose_time">Choose time</string>
+    <string name="use_live_values">Use live location and current time</string>
+    <string name="invalid_latitude">Enter a latitude from -90 to 90</string>
+    <string name="invalid_longitude">Enter a longitude from -180 to 180</string>
+    <string name="coordinate_pair_required">Enter both latitude and longitude</string>
+    <string name="open_settings">Open settings</string>
+    <string name="settings">Settings</string>
+    <string name="settings_helper">Privacy, terms, and creator credits</string>
+    <string name="privacy_and_terms">Privacy and terms</string>
+    <string name="privacy_policy">Privacy policy</string>
+    <string name="terms_of_use">Terms of use</string>
+    <string name="creator_credits">Creator credits</string>
+    <string name="created_by">Created by Rahul S</string>
+    <string name="creator_helper">Official project and creator links</string>
+    <string name="github_profile">GitHub profile</string>
+    <string name="project_repository">Project repository</string>
+    <string name="project_website">Project website</string>
+    <string name="done">Done</string>
+    <string name="no_browser_available">No browser is available to open this link</string>
+    <string name="credit_github_profile_url" translatable="false">https://github.com/dangiashish</string>
+    <string name="credit_repository_url" translatable="false">https://github.com/dangiashish/GeoTagImage</string>
+    <string name="credit_website_url" translatable="false">https://dangiashish.github.io/GeoTagImage</string>
+    <string name="privacy_policy_body">Geo Tag Photo needs Camera and Location permissions to create geotagged photos.\n\nCaptured photos, selected date and time, and location details are processed on your device and saved to storage you control. This app does not require an account and does not include advertising or analytics SDKs.\n\nAndroid and Google Play location services may provide the device location. The system geocoder may be used to turn coordinates into a place or address. When Map preview is enabled and a Google Maps API key is configured, coordinates are sent to the Google Maps Static API to create the map image. Those services handle requests under their own privacy policies.\n\nYou can edit or clear place, address, coordinates, date, and time before capture. You can revoke permissions at any time in Android Settings; features that require those permissions will stop working.\n\nThis policy describes the current app build and may be updated when its features change.</string>
+    <string name="terms_of_use_body">Use Geo Tag Photo only where you have permission to capture, store, and share images. You are responsible for following local laws and respecting other people and private property.\n\nLocation, address, date, and time can be detected automatically or edited manually. Accuracy is not guaranteed, and edited metadata must not be treated as independent proof of where or when a photo was taken.\n\nThe app is provided as is, without warranties. You are responsible for reviewing photos and metadata before relying on or sharing them. Third-party location, geocoding, and mapping services are subject to their own terms.\n\nBy using the app, you agree to these terms.</string>
+</resources>
