@@ -1,3 +1,2 @@
-User-agent: *
-Allow: /
-Sitemap: https://dangiashish.github.io/GeoTagImage/sitemap.xml
+# Documentation is hosted within the GitHub repository.
+# See docs/README.md for full documentation.

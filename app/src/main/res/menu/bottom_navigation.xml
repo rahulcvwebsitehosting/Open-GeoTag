@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/navCamera"
+        android:icon="@drawable/ic_outline_camera_alt_24"
+        android:title="@string/nav_camera" />
+    <item
+        android:id="@+id/navTemplates"
+        android:icon="@drawable/ic_templates_24"
+        android:title="@string/nav_templates" />
+    <item
+        android:id="@+id/navRecent"
+        android:icon="@drawable/ic_history_24"
+        android:title="@string/nav_recent" />
+    <item
+        android:id="@+id/navSaved"
+        android:icon="@drawable/ic_saved_24"
+        android:title="@string/nav_saved" />
+</menu>

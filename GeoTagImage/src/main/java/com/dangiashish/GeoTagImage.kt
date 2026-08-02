@@ -203,6 +203,14 @@ class GeoTagImage(
         val ratioLabel: String
     )
 
+    /** A user-facing snapshot of the device location resolved by the library. */
+    data class LocationDetails(
+        val place: String,
+        val address: String,
+        val latitude: Double,
+        val longitude: Double
+    )
+
     private var flashMode = FlashMode.OFF
     private var flashCode = 0
 
@@ -709,7 +717,11 @@ class GeoTagImage(
     /**
      * Fetch current location
      */
-    private fun deviceLocation(location: Location, onResolved: () -> Unit) {
+    private fun deviceLocation(
+        location: Location,
+        onResolved: () -> Unit,
+        shouldLoadMap: Boolean = true
+    ) {
 
         latitude = location.latitude
         longitude = location.longitude
@@ -723,7 +735,11 @@ class GeoTagImage(
         val finishResolution: () -> Unit = {
             if (completionDelivered.compareAndSet(false, true)) {
                 mainHandler.removeCallbacksAndMessages(completionDelivered)
-                loadMapForCurrentLocation(onResolved)
+                if (shouldLoadMap) {
+                    loadMapForCurrentLocation(onResolved)
+                } else {
+                    ContextCompat.getMainExecutor(context).execute(onResolved)
+                }
             }
         }
         mainHandler.postAtTime(
@@ -1435,6 +1451,37 @@ class GeoTagImage(
         customLatitude = null
         customLongitude = null
         customDateTimeMillis = null
+    }
+
+    /**
+     * Refreshes the device location and returns the same resolved values used on photos.
+     * The callback is delivered on the main thread; null means that no location fix was available.
+     */
+    fun fetchCurrentLocationDetails(callback: (LocationDetails?) -> Unit) {
+        try {
+            GTILocationUtility.fetchLocation(context) { location ->
+                if (location == null) {
+                    ContextCompat.getMainExecutor(context).execute { callback(null) }
+                    return@fetchLocation
+                }
+                latestLocation = location
+                deviceLocation(location, shouldLoadMap = false, onResolved = {
+                    val resolvedPlace = listOf(city, country)
+                        .filter(String::isNotBlank)
+                        .joinToString(", ")
+                    callback(
+                        LocationDetails(
+                            place = resolvedPlace,
+                            address = address,
+                            latitude = latitude,
+                            longitude = longitude
+                        )
+                    )
+                })
+            }
+        } catch (_: SecurityException) {
+            ContextCompat.getMainExecutor(context).execute { callback(null) }
+        }
     }
 
     /**

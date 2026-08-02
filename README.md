@@ -1,35 +1,40 @@
 <p align="center">
-<img src="https://github.com/dangiashish/GeoTagImage/assets/70362030/88c3e47a-0029-4d90-8276-540558137ccc" alt=""/>
+<img src="./GeoTagImage/image.png" alt=""/>
 </p>
 
 
 <div align = "center">
-<h1 align="center"> 💫 GeoTagImage (GTI) 📸🌍 </h1>
+<h1 align="center"> GeoTagImage (GTI) </h1>
 <p align="center"><b>GeoTagImage</b> is a lightweight, powerful Android library designed to simplify capturing photos with embedded real-time metadata. It automatically overlays location details (Address, City, Lat/Lng), custom timestamps, author names, and even a Google Maps static preview directly onto the image.</p>
-<a href="https://www.codefactor.io/repository/github/dangiashish/geotagimage/overview/master"><img src="https://www.codefactor.io/repository/github/dangiashish/geotagimage/badge/master" alt="CodeFactor" /></a>
-<a href="https://jitpack.io/#dangiashish/GeoTagImage"><img src="https://jitpack.io/v/dangiashish/GeoTagImage.svg" alt=""/></a>
+<a href="https://www.codefactor.io/repository/github/rahulcvwebsitehosting/open-geotag/overview/master"><img src="https://www.codefactor.io/repository/github/rahulcvwebsitehosting/open-geotag/badge/master" alt="CodeFactor" /></a>
+<a href="https://jitpack.io/#rahulcvwebsitehosting/Open-GeoTag"><img src="https://jitpack.io/v/rahulcvwebsitehosting/Open-GeoTag.svg" alt=""/></a>
 <a href="(https://developer.android.com/tools/sdkmanager"><img src="https://img.shields.io/badge/android--sdk-24%2B-green" alt=""/></a>
 <a href="https://www.java.com/"><img src="https://img.shields.io/badge/compatible-java-blue" alt=""/></a>
 <a href="https://kotlinlang.org/"><img src="https://img.shields.io/badge/compatible-kotlin-blueviolet" alt=""/></a>
 
-#### Read the documentation on [dangiashish.github.io](https://dangiashish.github.io/GeoTagImage)
+#### Read the documentation in [docs/](docs/)
 <br/>
 
 </div>
 
 
-### ✨ Key Features :
-- 🚀 CameraX Integration: Seamless custom camera interface with zoom, flip, and flash support.
-- 🗺️ Google Maps Overlay: Embed a static map of the capture location onto the photo.
-- 📍 Smart Geocoding: Automatically fetches address, city, and country with flag emojis.
-- ✍️ Fully Customizable: Adjust text size, colors, fonts, and background transparency.
-- 💾 Flexible Storage: Choose between JPEG/PNG formats and custom directory names.
-- 🖼️ Aspect Ratio Control: Supports 1:1 (Square), 4:3, 16:9, and Full-screen ratios.
-- 🛠️ EXIF Support: Writes GPS coordinates and capture metadata into the image EXIF header.
+### Key Features :
+- CameraX Integration: Seamless custom camera interface with zoom, flip, and flash support.
+- Google Maps Overlay: Embed a static map of the capture location onto the photo.
+- Smart Geocoding: Automatically fetches address, city, and country with flag emojis.
+- Fully Customizable: Adjust text size, colors, fonts, and background transparency.
+- Flexible Storage: Choose between JPEG/PNG formats and custom directory names.
+- Aspect Ratio Control: Supports 1:1 (Square), 4:3, 16:9, and Full-screen ratios.
+- EXIF Support: Writes GPS coordinates and capture metadata into the image EXIF header.
 
 - Smart Capture: Automatically recommends 4:3 portrait or 16:9 landscape framing.
 - Auto Straighten: Shows a live level guide and safely corrects small camera tilt after capture.
 - Style Presets: Smart Auto, Landscape, Portrait, Square, and Field Proof configure sensible defaults in one call.
+- Editable Live Metadata: Shows the resolved current place, address, GPS coordinates, date, and time before capture.
+- Tap-to-Choose Location: Lightweight OpenStreetMap picker with manual coordinate fields as an offline fallback.
+- Geo Tag Templates: Classic, Travel Landscape, Clean Social, and Field Evidence presets.
+- Photo Library: Bottom navigation for recent capture history and all photos saved by Geo Tag Photo.
+- Responsive Photo Loading: Sampled previews, background metadata work, and cached RecyclerView thumbnails reduce UI stalls.
 
 #### Gradle
 
@@ -54,8 +59,6 @@ dependencyResolutionManagement {
 }
 
 ```
-
-Updated
 
 ```gradle
 pluginManagement {
@@ -88,7 +91,7 @@ Add dependency in your `build.gradle` (module-level) file :
 ```groovy
 dependencies{
 
-    implementation 'com.github.dangiashish:GeoTagImage:${latest_version}'
+    implementation 'com.github.rahulcvwebsitehosting:Open-GeoTag:${latest_version}'
 }
 ```
 #### OR
@@ -97,11 +100,11 @@ Add dependency in your `build.gradle.kts` (module-level) file :
 ```groovy
 dependencies{
 
-    implementation("com.github.dangiashish:GeoTagImage:${latest_version}")
+    implementation("com.github.rahulcvwebsitehosting:Open-GeoTag:${latest_version}")
 }
 ```
 
-#### Add file provider in [AndroidManifest.xml](https://github.com/dangiashish/GeoTagImage/blob/afad2aca53837da4de3c37163911ed897bc3c540/app/src/main/AndroidManifest.xml#L34)
+#### Add file provider in AndroidManifest.xml
 ```groovy
 <provider
 android:name="androidx.core.content.FileProvider"
@@ -114,7 +117,7 @@ android:resource="@xml/provider_paths" />
         </provider>
 
 ```
-#### Create an XML file for path provider [@xml/provider_path.xml](https://github.com/dangiashish/GeoTagImage/blob/afad2aca53837da4de3c37163911ed897bc3c540/app/src/main/res/xml/provider_paths.xml)
+#### Create an XML file for path provider @xml/provider_path.xml
 ```groovy
 <?xml version="1.0" encoding="utf-8"?>
         <paths xmlns:android="http://schemas.android.com/apk/res/android">
@@ -123,7 +126,7 @@ android:resource="@xml/provider_paths" />
 ```
 
 #### Implementation :
-Reference → [activity_main.xml](https://github.com/dangiashish/GeoTagImage/blob/master/app/src/main/res/layout/activity_main.xml) & [MainActivity.kt](https://github.com/dangiashish/GeoTagImage/blob/afad2aca53837da4de3c37163911ed897bc3c540/app/src/main/java/com/codebyashish/geotagimage/MainActivity.kt)
+Reference -> [activity_main.xml](https://github.com/rahulcvwebsitehosting/Open-GeoTag/blob/master/app/src/main/res/layout/activity_main.xml) & [MainActivity.kt](https://github.com/rahulcvwebsitehosting/Open-GeoTag/blob/master/app/src/main/java/com/geotagcv/MainActivity.kt)
 
 ```kotlin
 import com.dangiashish.GeoTagImage

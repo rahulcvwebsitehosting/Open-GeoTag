@@ -6,9 +6,12 @@
 package com.geotagcv
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
+import android.location.Geocoder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -23,6 +26,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.doAfterTextChanged
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.dangiashish.GeoTagImage
 import com.dangiashish.GeoTagImage.ImageStyle
 import com.dangiashish.GeoTagImage.MapViewType
@@ -32,11 +36,11 @@ import com.dangiashish.PermissionCallback
 import com.geotagcv.databinding.ActivityMainBinding
 import com.geotagcv.databinding.DialogSettingsBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import java.io.File
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.concurrent.Executors
 import kotlin.math.abs
 
 class MainActivity : AppCompatActivity(), PermissionCallback {
@@ -44,9 +48,15 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     private lateinit var gti: GeoTagImage
     private lateinit var cameraLauncher: ActivityResultLauncher<Uri>
     private lateinit var permissionLauncher: ActivityResultLauncher<Array<String>>
+    private lateinit var mapPickerLauncher: ActivityResultLauncher<Intent>
     private val binding by lazy { ActivityMainBinding.inflate(layoutInflater) }
     private val customDateTime: Calendar = Calendar.getInstance()
+    private val historyRepository by lazy { PhotoHistoryRepository(applicationContext) }
+    private val backgroundExecutor = Executors.newSingleThreadExecutor()
+    private lateinit var recentAdapter: PhotoHistoryAdapter
+    private lateinit var savedAdapter: PhotoHistoryAdapter
     private var customDateTimeSelected = false
+    private var updatingMetadataFields = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,6 +80,18 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             }
         }
 
+        mapPickerLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+            val data = result.data ?: return@registerForActivityResult
+            val latitude = data.getDoubleExtra(MapPickerActivity.EXTRA_LATITUDE, Double.NaN)
+            val longitude = data.getDoubleExtra(MapPickerActivity.EXTRA_LONGITUDE, Double.NaN)
+            if (!latitude.isNaN() && !longitude.isNaN()) {
+                usePickedCoordinates(latitude, longitude)
+            }
+        }
+
         gti = GeoTagImage(this, permissionLauncher, cameraLauncher).apply {
             enableCameraX(true)
             enableSmartCapture(true)
@@ -87,6 +109,9 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         setupStyleRecommendations()
         setupCustomMetadataEditor()
         setupAdvancedSettings()
+        setupTemplates()
+        setupPhotoHistory()
+        setupBottomNavigation()
         applyStyle(ImageStyle.SMART_AUTO)
     }
 
@@ -292,7 +317,9 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     private fun setupCustomMetadataEditor() {
         binding.customMetadataSwitch.setOnCheckedChangeListener { _, checked ->
             binding.customMetadataContent.visibility = if (checked) View.VISIBLE else View.GONE
-            if (!checked) {
+            if (checked) {
+                prefillCurrentMetadata()
+            } else {
                 gti.clearCustomMetadata()
                 customDateTimeSelected = false
                 customDateTime.timeInMillis = System.currentTimeMillis()
@@ -303,6 +330,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
                 binding.btnPickDate.setText(R.string.choose_date)
                 binding.btnPickTime.setText(R.string.choose_time)
                 clearCoordinateErrors()
+                binding.tvCurrentLocation.setText(R.string.current_location_not_loaded)
             }
         }
 
@@ -341,13 +369,16 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             ).show()
         }
 
+        binding.btnRefreshLocation.setOnClickListener { prefillCurrentLocation() }
+        binding.btnChooseLocation.setOnClickListener { openMapPicker() }
+
         binding.btnResetMetadata.setOnClickListener {
             binding.customMetadataSwitch.isChecked = false
         }
     }
 
     private fun applyCustomLocation() {
-        if (!binding.customMetadataSwitch.isChecked) return
+        if (!binding.customMetadataSwitch.isChecked || updatingMetadataFields) return
         val latitudeText = binding.etCustomLatitude.text?.toString()?.trim().orEmpty()
         val longitudeText = binding.etCustomLongitude.text?.toString()?.trim().orEmpty()
         val latitude = latitudeText.toDoubleOrNull()
@@ -386,34 +417,249 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             SimpleDateFormat("hh:mm a", Locale.getDefault()).format(customDateTime.time)
     }
 
+    private fun prefillCurrentMetadata() {
+        customDateTime.timeInMillis = System.currentTimeMillis()
+        customDateTimeSelected = true
+        applyCustomDateTime()
+        prefillCurrentLocation()
+    }
+
+    private fun prefillCurrentLocation() {
+        if (!binding.customMetadataSwitch.isChecked) return
+        binding.tvCurrentLocation.setText(R.string.current_location_loading)
+        binding.btnRefreshLocation.isEnabled = false
+        binding.btnChooseLocation.isEnabled = false
+        gti.fetchCurrentLocationDetails { details ->
+            if (isFinishing || isDestroyed) return@fetchCurrentLocationDetails
+            binding.btnRefreshLocation.isEnabled = true
+            binding.btnChooseLocation.isEnabled = true
+            if (details == null) {
+                binding.tvCurrentLocation.setText(R.string.current_location_unavailable)
+                return@fetchCurrentLocationDetails
+            }
+            updatingMetadataFields = true
+            binding.etCustomPlace.setText(details.place)
+            binding.etCustomAddress.setText(details.address)
+            binding.etCustomLatitude.setText(formatCoordinate(details.latitude))
+            binding.etCustomLongitude.setText(formatCoordinate(details.longitude))
+            updatingMetadataFields = false
+            binding.tvCurrentLocation.text = getString(
+                R.string.current_location_summary,
+                details.place.ifBlank { getString(R.string.current_location) },
+                details.latitude,
+                details.longitude
+            )
+            applyCustomLocation()
+        }
+    }
+
+    private fun openMapPicker() {
+        val latitude = binding.etCustomLatitude.text?.toString()?.toDoubleOrNull()
+        val longitude = binding.etCustomLongitude.text?.toString()?.toDoubleOrNull()
+        val intent = Intent(this, MapPickerActivity::class.java).apply {
+            if (latitude != null) putExtra(MapPickerActivity.EXTRA_LATITUDE, latitude)
+            if (longitude != null) putExtra(MapPickerActivity.EXTRA_LONGITUDE, longitude)
+        }
+        mapPickerLauncher.launch(intent)
+    }
+
+    private fun usePickedCoordinates(latitude: Double, longitude: Double) {
+        updatingMetadataFields = true
+        binding.etCustomLatitude.setText(formatCoordinate(latitude))
+        binding.etCustomLongitude.setText(formatCoordinate(longitude))
+        updatingMetadataFields = false
+        binding.tvCurrentLocation.text = getString(
+            R.string.selected_location_summary,
+            latitude,
+            longitude
+        )
+        applyCustomLocation()
+        resolvePickedAddress(latitude, longitude)
+    }
+
+    private fun resolvePickedAddress(latitude: Double, longitude: Double) {
+        backgroundExecutor.execute {
+            val result = runCatching {
+                @Suppress("DEPRECATION")
+                Geocoder(this, Locale.getDefault())
+                    .getFromLocation(latitude, longitude, 1)
+                    ?.firstOrNull()
+            }.getOrNull()
+            runOnUiThread {
+                if (result == null || isFinishing || isDestroyed) return@runOnUiThread
+                updatingMetadataFields = true
+                binding.etCustomPlace.setText(
+                    result.locality ?: result.subAdminArea ?: result.adminArea.orEmpty()
+                )
+                binding.etCustomAddress.setText(result.getAddressLine(0).orEmpty())
+                updatingMetadataFields = false
+                applyCustomLocation()
+            }
+        }
+    }
+
+    private fun formatCoordinate(value: Double): String =
+        String.format(Locale.US, "%.6f", value)
+
     private fun clearCoordinateErrors() {
         binding.latitudeInputLayout.error = null
         binding.longitudeInputLayout.error = null
     }
 
+    private fun setupTemplates() {
+        binding.templateClassic.setOnClickListener {
+            applyTemplate(ImageStyle.SMART_AUTO, R.id.chipSmartAuto, R.string.template_active_classic)
+        }
+        binding.templateTravel.setOnClickListener {
+            applyTemplate(ImageStyle.LANDSCAPE, R.id.chipLandscape, R.string.template_active_travel)
+        }
+        binding.templateClean.setOnClickListener {
+            applyTemplate(ImageStyle.SQUARE, R.id.chipSquare, R.string.template_active_clean)
+        }
+        binding.templateEvidence.setOnClickListener {
+            applyTemplate(ImageStyle.FIELD_PROOF, R.id.chipFieldProof, R.string.template_active_evidence)
+        }
+    }
+
+    private fun applyTemplate(style: ImageStyle, chipId: Int, @StringRes label: Int) {
+        binding.smartCaptureSwitch.isChecked = true
+        binding.styleChips.check(chipId)
+        applyStyle(style)
+        binding.tvActiveTemplate.setText(label)
+        binding.bottomNavigation.selectedItemId = R.id.navCamera
+        showMessage(getString(R.string.template_applied))
+    }
+
+    private fun setupPhotoHistory() {
+        recentAdapter = PhotoHistoryAdapter(contentResolver, ::openSavedPhoto)
+        savedAdapter = PhotoHistoryAdapter(contentResolver, ::openSavedPhoto)
+        binding.recentList.apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            adapter = recentAdapter
+            setHasFixedSize(true)
+            itemAnimator = null
+        }
+        binding.savedList.apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            adapter = savedAdapter
+            setHasFixedSize(true)
+            itemAnimator = null
+        }
+    }
+
+    private fun setupBottomNavigation() {
+        binding.bottomNavigation.setOnItemSelectedListener { item ->
+            binding.capturePage.visibility = if (item.itemId == R.id.navCamera) View.VISIBLE else View.GONE
+            binding.templatesPage.visibility = if (item.itemId == R.id.navTemplates) View.VISIBLE else View.GONE
+            binding.recentPage.visibility = if (item.itemId == R.id.navRecent) View.VISIBLE else View.GONE
+            binding.savedPage.visibility = if (item.itemId == R.id.navSaved) View.VISIBLE else View.GONE
+            when (item.itemId) {
+                R.id.navRecent -> loadRecentHistory()
+                R.id.navSaved -> loadSavedPhotos()
+            }
+            true
+        }
+        binding.bottomNavigation.selectedItemId = R.id.navCamera
+    }
+
+    private fun refreshVisibleHistory() {
+        when (binding.bottomNavigation.selectedItemId) {
+            R.id.navRecent -> loadRecentHistory()
+            R.id.navSaved -> loadSavedPhotos()
+        }
+    }
+
+    private fun loadRecentHistory() {
+        backgroundExecutor.execute {
+            val records = historyRepository.loadRecentPhotos()
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                recentAdapter.submitList(records)
+                binding.recentEmpty.visibility = if (records.isEmpty()) View.VISIBLE else View.GONE
+            }
+        }
+    }
+
+    private fun loadSavedPhotos() {
+        backgroundExecutor.execute {
+            val records = historyRepository.loadAllSavedPhotos()
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                savedAdapter.submitList(records)
+                binding.savedEmpty.visibility = if (records.isEmpty()) View.VISIBLE else View.GONE
+            }
+        }
+    }
+
+    private fun openSavedPhoto(record: PhotoRecord) {
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(record.uri, "image/*")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching { startActivity(intent) }
+            .onFailure { showMessage(getString(R.string.no_gallery_available)) }
+    }
+
     private fun previewCapturedImage() {
         val uri = gtiUri ?: return
-        try {
-            val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                ImageDecoder.decodeBitmap(ImageDecoder.createSource(contentResolver, uri))
-            } else {
-                @Suppress("DEPRECATION")
-                MediaStore.Images.Media.getBitmap(contentResolver, uri)
+        binding.progressBar.visibility = View.VISIBLE
+        backgroundExecutor.execute {
+            historyRepository.recordCapture(uri)
+            val bitmap = decodePreview(uri)
+            val size = getUriFileSize(uri)
+            runOnUiThread {
+                if (gtiUri != uri || isFinishing || isDestroyed) return@runOnUiThread
+                binding.progressBar.visibility = View.GONE
+                if (bitmap == null) {
+                    showMessage("The photo was saved, but its preview could not be loaded")
+                    return@runOnUiThread
+                }
+                binding.ivImage.setImageBitmap(bitmap)
+                binding.ivImage.visibility = View.VISIBLE
+                binding.emptyState.visibility = View.GONE
+                binding.ivClose.visibility = View.VISIBLE
+                binding.tvPhotoInsight.text = buildPhotoInsight(bitmap)
+                binding.tvPhotoInsight.visibility = View.VISIBLE
+                binding.tvGTIPath.text = uri.toString()
+                binding.tvImgSize.text = size
+                binding.cardResult.visibility = View.VISIBLE
+                refreshVisibleHistory()
             }
+        }
+    }
 
-            binding.ivImage.setImageBitmap(bitmap)
-            binding.ivImage.visibility = View.VISIBLE
-            binding.emptyState.visibility = View.GONE
-            binding.ivClose.visibility = View.VISIBLE
-            binding.progressBar.visibility = View.GONE
-            binding.tvPhotoInsight.text = buildPhotoInsight(bitmap)
-            binding.tvPhotoInsight.visibility = View.VISIBLE
-            binding.tvGTIPath.text = uri.path.orEmpty()
-            binding.tvImgSize.text = getFileSize(uri.path)
-            binding.cardResult.visibility = View.VISIBLE
-        } catch (_: Exception) {
-            binding.progressBar.visibility = View.GONE
-            showMessage("The photo was saved, but its preview could not be loaded")
+    private fun decodePreview(uri: Uri): Bitmap? = runCatching {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(contentResolver, uri)) { decoder, info, _ ->
+                val width = info.size.width
+                val height = info.size.height
+                val largestSide = maxOf(width, height)
+                if (largestSide > PREVIEW_MAX_SIDE) {
+                    val scale = PREVIEW_MAX_SIDE.toFloat() / largestSide
+                    decoder.setTargetSize((width * scale).toInt(), (height * scale).toInt())
+                }
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+        } else {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            var sample = 1
+            while (maxOf(bounds.outWidth, bounds.outHeight) / sample > PREVIEW_MAX_SIDE) sample *= 2
+            val options = BitmapFactory.Options().apply { inSampleSize = sample }
+            contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+        }
+    }.getOrNull()
+
+    private fun getUriFileSize(uri: Uri): String {
+        val bytes = runCatching {
+            contentResolver.query(uri, arrayOf(MediaStore.Images.Media.SIZE), null, null, null)
+                ?.use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else 0L }
+        }.getOrNull() ?: 0L
+        return when {
+            bytes >= 1024L * 1024L -> "~ ${DecimalFormat("#.##").format(bytes / 1048576.0)} MB"
+            bytes >= 1024L -> "~ ${DecimalFormat("#.##").format(bytes / 1024.0)} KB"
+            bytes > 0L -> "~ $bytes Bytes"
+            else -> ""
         }
     }
 
@@ -429,18 +675,6 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         return getString(R.string.photo_insight, orientation, ratioLabel)
     }
 
-    private fun getFileSize(filePath: String?): String {
-        val file = filePath?.let(::File) ?: return ""
-        if (!file.exists()) return ""
-        val bytes = file.length()
-        val formatter = DecimalFormat("#.##")
-        return when {
-            bytes >= 1024 * 1024 -> "${formatter.format(bytes / 1024.0 / 1024.0)} MB"
-            bytes >= 1024 -> "${formatter.format(bytes / 1024.0)} KB"
-            else -> "$bytes bytes"
-        }
-    }
-
     private fun showMessage(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
@@ -452,7 +686,14 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     }
 
     override fun onDestroy() {
+        if (::recentAdapter.isInitialized) recentAdapter.release()
+        if (::savedAdapter.isInitialized) savedAdapter.release()
+        backgroundExecutor.shutdownNow()
         if (::gti.isInitialized) gti.cleanup()
         super.onDestroy()
+    }
+
+    companion object {
+        private const val PREVIEW_MAX_SIDE = 1600
     }
 }
