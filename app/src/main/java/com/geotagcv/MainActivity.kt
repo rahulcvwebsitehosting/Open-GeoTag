@@ -9,6 +9,7 @@ import android.Manifest
 import android.app.Activity
 import android.app.Dialog
 import android.content.Intent
+import android.content.ContentResolver
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
@@ -29,6 +30,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.annotation.DrawableRes
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
 import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.dangiashish.GeoTagImage
@@ -45,6 +47,7 @@ import com.geotagcv.databinding.ItemTemplatePreviewBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
+import java.io.File
 import java.util.Calendar
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -69,6 +72,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     private var tagPhotoReviewBinding: DialogTagPhotoReviewBinding? = null
     private var tagPhotoPreviewBitmap: Bitmap? = null
     private lateinit var photoPickerLauncher: ActivityResultLauncher<PickVisualMediaRequest>
+    private lateinit var documentLauncher: ActivityResultLauncher<Array<String>>
     private var tagPhotoLocation: TagPhotoLocation? = null
     private var tagPhotoCameraSnapshot: CustomMetadataSnapshot? = null
 
@@ -115,6 +119,14 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
 
         photoPickerLauncher = registerForActivityResult(
             ActivityResultContracts.PickVisualMedia()
+        ) { uri ->
+            if (uri == null) return@registerForActivityResult
+            startTagPhotoReview(uri)
+        }
+
+        // Fallback for devices that lack the Photo Picker (no Play Services backport).
+        documentLauncher = registerForActivityResult(
+            ActivityResultContracts.OpenDocument()
         ) { uri ->
             if (uri == null) return@registerForActivityResult
             startTagPhotoReview(uri)
@@ -713,9 +725,13 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     private fun setupTagSavedPhoto() {
         binding.btnTagFromGallery.setOnClickListener {
             if (tagPhotoDialog?.isShowing == true) return@setOnClickListener
-            photoPickerLauncher.launch(
-                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-            )
+            runCatching {
+                photoPickerLauncher.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                )
+            }.onFailure {
+                documentLauncher.launch(arrayOf("image/*"))
+            }
         }
         binding.btnTagFromAlbum.setOnClickListener {
             if (tagPhotoDialog?.isShowing == true) return@setOnClickListener
@@ -759,11 +775,19 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         }
 
         backgroundExecutor.execute {
+            val sourceFile = if (sourceUri.scheme == ContentResolver.SCHEME_FILE) {
+                File(sourceUri.path.orEmpty()).takeIf(File::exists)
+            } else {
+                null
+            }
             val bitmap = runCatching {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    ImageDecoder.decodeBitmap(
+                    val decoderSource = if (sourceFile != null) {
+                        ImageDecoder.createSource(sourceFile)
+                    } else {
                         ImageDecoder.createSource(contentResolver, sourceUri)
-                    ) { decoder, info, _ ->
+                    }
+                    ImageDecoder.decodeBitmap(decoderSource) { decoder, info, _ ->
                         val largest = maxOf(info.size.width, info.size.height)
                         if (largest > REVIEW_MAX_SIDE) {
                             val scale = REVIEW_MAX_SIDE.toFloat() / largest
@@ -776,7 +800,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
                     }
                 } else {
                     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    contentResolver.openInputStream(sourceUri)?.use {
+                    (sourceFile?.inputStream() ?: contentResolver.openInputStream(sourceUri))?.use {
                         BitmapFactory.decodeStream(it, null, bounds)
                     }
                     var sample = 1
@@ -784,7 +808,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
                         sample *= 2
                     }
                     val options = BitmapFactory.Options().apply { inSampleSize = sample }
-                    contentResolver.openInputStream(sourceUri)?.use {
+                    (sourceFile?.inputStream() ?: contentResolver.openInputStream(sourceUri))?.use {
                         BitmapFactory.decodeStream(it, null, options)
                     }
                 }
@@ -1046,8 +1070,18 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     }
 
     private fun openSavedPhoto(record: PhotoRecord) {
+        val viewUri = when (record.uri.scheme) {
+            // Legacy records from before the library returned gallery Uris point at
+            // app-private files; expose them to viewers through the app's FileProvider.
+            ContentResolver.SCHEME_FILE -> {
+                val file = File(record.uri.path ?: return)
+                if (!file.exists()) return
+                FileProvider.getUriForFile(this, "$packageName.provider", file)
+            }
+            else -> record.uri
+        }
         val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(record.uri, "image/*")
+            setDataAndType(viewUri, "image/*")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         runCatching { startActivity(intent) }

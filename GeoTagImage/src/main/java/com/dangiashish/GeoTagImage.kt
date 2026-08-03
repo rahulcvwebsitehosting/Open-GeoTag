@@ -54,6 +54,7 @@ import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.content.ContentResolver
 import android.provider.MediaStore
 import android.util.Log
 import android.util.Size
@@ -909,7 +910,7 @@ class GeoTagImage(
                 bitmap
             }
 
-            saveImageToGallery(finalBitmap)
+            val savedUri = saveImageToGallery(finalBitmap)
             val outputStream = file.outputStream()
             finalBitmap.compress(outputCompressFormat(), outputQuality(), outputStream)
             outputStream.close()
@@ -918,7 +919,9 @@ class GeoTagImage(
 
             finalBitmap.recycle()
 
-            return Uri.fromFile(file)
+            // Prefer the gallery (MediaStore) Uri so the photo can be shared and opened
+            // by other apps; fall back to the private file Uri only if the insert failed.
+            return savedUri ?: Uri.fromFile(file)
         }
         return null
     }
@@ -946,8 +949,13 @@ class GeoTagImage(
         val hasUserCoordinates = customLatitude != null && customLongitude != null
         val prepareAndRender: () -> Unit = {
             loadMapForCurrentLocation {
-                ContextCompat.getMainExecutor(context).execute {
-                    onProcessed(renderTaggedCopy(sourceUri))
+                // Render, write and index the copy off the main thread; only the
+                // result callback is delivered on the main thread.
+                executorService.execute {
+                    val savedUri = renderTaggedCopy(sourceUri)
+                    ContextCompat.getMainExecutor(context).execute {
+                        onProcessed(savedUri)
+                    }
                 }
             }
         }
@@ -962,7 +970,12 @@ class GeoTagImage(
 
     private fun renderTaggedCopy(sourceUri: Uri): Uri? {
         val sourceBitmap = runCatching {
-            contentResolverOrNull()?.openInputStream(sourceUri)?.use { inputStream ->
+            val input = if (sourceUri.scheme == ContentResolver.SCHEME_FILE) {
+                File(sourceUri.path ?: return null).inputStream()
+            } else {
+                contentResolverOrNull()?.openInputStream(sourceUri)
+            }
+            input?.use { inputStream ->
                 BitmapFactory.decodeStream(inputStream)
             }
         }.getOrNull() ?: return null

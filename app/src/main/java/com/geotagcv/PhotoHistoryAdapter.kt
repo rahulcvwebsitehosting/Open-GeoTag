@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.geotagcv.databinding.ItemPhotoHistoryBinding
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -79,9 +80,14 @@ class PhotoHistoryAdapter(
         }
 
         private fun decodeThumbnail(record: PhotoRecord): Bitmap? = runCatching {
+            val sourceFile = if (record.uri.scheme == ContentResolver.SCHEME_FILE) {
+                File(record.uri.path.orEmpty()).takeIf(File::exists)
+            } else {
+                null
+            }
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            contentResolver.openFileDescriptor(record.uri, "r")?.use { descriptor ->
-                BitmapFactory.decodeFileDescriptor(descriptor.fileDescriptor, null, bounds)
+            (sourceFile?.inputStream() ?: contentResolver.openInputStream(record.uri))?.use {
+                BitmapFactory.decodeStream(it, null, bounds)
             }
             var sampleSize = 1
             while (max(bounds.outWidth, bounds.outHeight) / sampleSize > THUMBNAIL_SIZE_PX) {
@@ -91,8 +97,8 @@ class PhotoHistoryAdapter(
                 inSampleSize = sampleSize
                 inPreferredConfig = Bitmap.Config.RGB_565
             }
-            contentResolver.openFileDescriptor(record.uri, "r")?.use { descriptor ->
-                BitmapFactory.decodeFileDescriptor(descriptor.fileDescriptor, null, options)
+            (sourceFile?.inputStream() ?: contentResolver.openInputStream(record.uri))?.use {
+                BitmapFactory.decodeStream(it, null, options)
             }
         }.getOrNull()
     }
