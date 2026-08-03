@@ -126,7 +126,7 @@
     <string name="nav_recent">Recent</string>
     <string name="nav_saved">Saved</string>
     <string name="templates_title">Geo tag templates</string>
-    <string name="templates_helper">Preview each geo tag on a sample photo, then tap the card to apply its recommended settings.</string>
+    <string name="templates_helper">See each geo tag on the sample photo. Open it full screen or use the template when you are ready.</string>
     <string name="template_classic">Classic geo tag</string>
     <string name="template_classic_description">Place, address, date, coordinates and satellite map.</string>
     <string name="template_travel">Travel landscape</string>
@@ -136,16 +136,20 @@
     <string name="template_evidence">Field evidence</string>
     <string name="template_evidence_description">Date, GPS coordinates and hybrid map for records.</string>
     <string name="template_sample_photo">Sample photo showing the geo tag placement</string>
+    <string name="template_map_preview">Map preview inside the geo tag</string>
     <string name="use_this_template">Use this template</string>
-    <string name="template_card_description">Preview and use %1$s template</string>
-    <string name="template_preview_classic_title">Jhunjhunu, Rajasthan, India</string>
-    <string name="template_preview_classic_metadata">Bakara–Patusari Bypass\n28.046755, 75.434587 • 02 Aug 2026</string>
-    <string name="template_preview_travel_title">Rajasthan, India</string>
+    <string name="full_screen">Full screen</string>
+    <string name="use_template">Use</string>
+    <string name="template_full_screen_photo">Full-screen template preview photo</string>
+    <string name="close_full_screen_preview">Close full-screen preview</string>
+    <string name="template_preview_classic_title">Erode, Tamil Nadu, India</string>
+    <string name="template_preview_classic_metadata">CSE Block • Erode Sengunthar Engineering College\nGPS location • 02 Aug 2026</string>
+    <string name="template_preview_travel_title">Erode, Tamil Nadu, India</string>
     <string name="template_preview_travel_metadata">Landscape • Terrain map • 02 Aug 2026</string>
-    <string name="template_preview_clean_title">Jhunjhunu</string>
+    <string name="template_preview_clean_title">Erode, Tamil Nadu</string>
     <string name="template_preview_clean_metadata">02 Aug 2026 • 04:45 PM</string>
     <string name="template_preview_evidence_title">FIELD RECORD • GPS VERIFIED</string>
-    <string name="template_preview_evidence_metadata">28.046755, 75.434587\n02 Aug 2026 • 04:45 PM</string>
+    <string name="template_preview_evidence_metadata">Erode Sengunthar Engineering College\n02 Aug 2026 • 04:45 PM</string>
     <string name="template_active_classic">Active template: Classic geo tag</string>
     <string name="template_active_travel">Active template: Travel landscape</string>
     <string name="template_active_clean">Active template: Clean social</string>
@@ -158,6 +162,18 @@
     <string name="saved_photos_helper">All photos saved by this app. Tap one to open it.</string>
     <string name="saved_photos_empty">No Geo Tag Photo images were found on this device.</string>
     <string name="open_saved_photo_description">Open saved photo %1$s</string>
+    <string name="tag_saved_photo">Tag a saved photo</string>
+    <string name="tag_saved_photo_helper">Choose any photo from your gallery or this app and add a geo tag with a location you pick.</string>
+    <string name="tag_from_gallery">Tag from gallery</string>
+    <string name="tag_from_album">Tag from saved photos</string>
+    <string name="tag_photo_choose_location">Choose the location for this photo</string>
+    <string name="tag_photo_review_title">Review geo tag</string>
+    <string name="tag_photo_review_helper">A new tagged copy will be saved to your album. The original photo is not changed.</string>
+    <string name="tag_photo_save_tagged_copy">Save tagged copy</string>
+    <string name="tag_photo_pick_different_location">Pick a different location</string>
+    <string name="tag_photo_load_failed">That photo could not be loaded. Try another image.</string>
+    <string name="tag_photo_save_failed">The tagged copy could not be saved. Try again.</string>
+    <string name="tag_photo_saved">Tagged copy saved to your album</string>
     <string name="credit_github_profile_url" translatable="false">https://github.com/rahulcvwebsitehosting/Open-GeoTag</string>
     <string name="credit_repository_url" translatable="false">https://github.com/rahulcvwebsitehosting/Open-GeoTag/tree/main/docs</string>
     <string name="credit_website_url" translatable="false">https://github.com/rahulcvwebsitehosting/Open-GeoTag/releases/latest</string>

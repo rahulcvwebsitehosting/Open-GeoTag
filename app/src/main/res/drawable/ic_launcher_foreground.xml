@@ -24,7 +24,7 @@
         android:pathData="M54,40 C44.8,40 37.5,47.3 37.5,56.5 C37.5,68.7 54,82.5 54,82.5 C54,82.5 70.5,68.7 70.5,56.5 C70.5,47.3 63.2,40 54,40 Z" />
 
     <path
-        android:fillColor="#4F378B"
+        android:fillColor="#000000"
         android:pathData="M54,47.5 A9,9 0,1 0,54,65.5 A9,9 0,1 0,54,47.5" />
 
     <path
@@ -33,7 +33,7 @@
         android:pathData="M51,49.5 A3,3 0,1 0,51,55.5 A3,3 0,1 0,51,49.5" />
 
     <path
-        android:fillColor="#6750A4"
+        android:fillColor="#262626"
         android:pathData="M74,45 L80,45 C81.1,45 82,45.9 82,47 L82,50 C82,51.1 81.1,52 80,52 L74,52 C72.9,52 72,51.1 72,50 L72,47 C72,45.9 72.9,45 74,45 Z" />
     </group>
 </vector>

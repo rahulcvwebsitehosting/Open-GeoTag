@@ -923,6 +923,84 @@ class GeoTagImage(
         return null
     }
 
+    /**
+     * Applies a geo tag overlay to an existing image selected by the user (for example,
+     * a photo picked from the device gallery or the app's own Saved tab). The original
+     * file is never modified — a new tagged copy is written to the configured album and
+     * returned via [onProcessed]. Callers should pre-configure the tag using
+     * [setCustomLocation], [setCustomDateTime], [showDate], [showLatLng], [showGoogleMap],
+     * [setMapView], [setImageExtension], [setDirectory] and the other setters, exactly as
+     * they would before a camera capture.
+     *
+     * When no custom coordinates have been supplied via [setCustomLocation] the library
+     * attempts to resolve the device location first; if no fix is available, the overlay
+     * is still drawn with whatever place/address the user supplied (or skipped if blank).
+     *
+     * @param sourceUri content Uri of the image to tag.
+     * @param onProcessed callback receiving the Uri of the newly saved tagged copy,
+     *        or null when the source image could not be decoded or saving failed.
+     *        Always delivered on the main thread.
+     */
+    fun applyGeoTagToImage(sourceUri: Uri, onProcessed: (Uri?) -> Unit) {
+        currentPhotoPath = null
+        val hasUserCoordinates = customLatitude != null && customLongitude != null
+        val prepareAndRender: () -> Unit = {
+            loadMapForCurrentLocation {
+                ContextCompat.getMainExecutor(context).execute {
+                    onProcessed(renderTaggedCopy(sourceUri))
+                }
+            }
+        }
+
+        if (hasUserCoordinates) {
+            prepareAndRender()
+            return
+        }
+
+        fetchCurrentLocation(prepareAndRender)
+    }
+
+    private fun renderTaggedCopy(sourceUri: Uri): Uri? {
+        val sourceBitmap = runCatching {
+            contentResolverOrNull()?.openInputStream(sourceUri)?.use { inputStream ->
+                BitmapFactory.decodeStream(inputStream)
+            }
+        }.getOrNull() ?: return null
+
+        var bitmap = sourceBitmap
+        val scaled = scaleToMaxSide(bitmap, 1280)
+        if (scaled != bitmap) {
+            bitmap.recycle()
+            bitmap = scaled
+        }
+
+        val finalBitmap = if (isEnabled) {
+            val tagged = drawTextOnBitmap(bitmap)
+            bitmap.recycle()
+            tagged
+        } else {
+            bitmap
+        }
+
+        val savedUri = saveImageToGallery(finalBitmap)
+
+        if (savedUri != null) {
+            effectiveExifLocation()?.let { location ->
+                runCatching {
+                    context.contentResolver.openFileDescriptor(savedUri, "rw")?.use { pfd ->
+                        val exif = ExifInterface(pfd.fileDescriptor)
+                        setExif(exif, location)
+                    }
+                }.onFailure { Log.e(TAG, "Error writing EXIF to tagged copy: ${it.localizedMessage}") }
+            }
+        }
+
+        finalBitmap.recycle()
+        return savedUri
+    }
+
+    private fun contentResolverOrNull() = (context as? Activity)?.contentResolver ?: context.contentResolver
+
     private fun autoStraightenBitmap(bitmap: Bitmap): Bitmap {
         if (!autoStraightenEnabled) return bitmap
         val correction = -capturedLevelAngle
