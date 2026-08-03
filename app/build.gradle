@@ -22,6 +22,9 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Debug-signed release APK so the artifact is directly installable;
+            // replace with a release keystore before distributing.
+            signingConfig signingConfigs.debug
         }
     }
     compileOptions {
