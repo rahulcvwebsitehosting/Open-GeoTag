@@ -10,17 +10,23 @@ import android.app.Activity
 import android.app.Dialog
 import android.content.Intent
 import android.content.ContentResolver
+import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.location.Geocoder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.provider.Settings
+import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.Toast
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
@@ -29,8 +35,11 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.annotation.DrawableRes
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.content.edit
 import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.dangiashish.GeoTagImage
@@ -75,6 +84,11 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     private lateinit var documentLauncher: ActivityResultLauncher<Array<String>>
     private var tagPhotoLocation: TagPhotoLocation? = null
     private var tagPhotoCameraSnapshot: CustomMetadataSnapshot? = null
+    private val preferences by lazy { getSharedPreferences(PREFERENCES_NAME, MODE_PRIVATE) }
+    private var locationPermissionRequestInFlight = false
+    private var locationGateDialog: AlertDialog? = null
+
+    private enum class TemplateVisual { CLASSIC, TRAVEL, CLEAN, EVIDENCE }
 
     private data class TagPhotoRequest(val sourceUri: Uri)
 
@@ -98,14 +112,23 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(binding.root)
+        binding.root.visibility = View.INVISIBLE
 
         permissionLauncher = registerForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions()
         ) { permissions ->
+            locationPermissionRequestInFlight = false
             val cameraGranted = permissions[Manifest.permission.CAMERA] == true
-            val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-                    permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-            if (cameraGranted && locationGranted) onPermissionGranted() else onPermissionDenied()
+            if (hasLocationPermission()) {
+                unlockAppForLocation()
+                if (permissions.containsKey(Manifest.permission.CAMERA) && !cameraGranted) {
+                    showMessage(getString(R.string.camera_permission_required))
+                } else {
+                    onPermissionGranted()
+                }
+            } else {
+                lockAppForLocation()
+            }
         }
 
         cameraLauncher = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
@@ -157,8 +180,8 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             setDirectory("Geo Tag Photo")
             showAuthorName(false)
             showAppName(false)
+            saveOriginalPhoto(preferences.getBoolean(PREF_SAVE_ORIGINAL, false))
         }
-        gti.requestCameraAndLocationPermissions()
 
         setupSettings()
         setupCaptureActions()
@@ -170,6 +193,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         setupTagSavedPhoto()
         setupBottomNavigation()
         applyStyle(ImageStyle.SMART_AUTO)
+        ensureLocationAccess()
     }
 
     private fun setupSettings() {
@@ -178,6 +202,13 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
 
     private fun showSettingsDialog() {
         val settingsBinding = DialogSettingsBinding.inflate(layoutInflater)
+
+        settingsBinding.switchSaveOriginal.isChecked =
+            preferences.getBoolean(PREF_SAVE_ORIGINAL, false)
+        settingsBinding.switchSaveOriginal.setOnCheckedChangeListener { _, enabled ->
+            preferences.edit { putBoolean(PREF_SAVE_ORIGINAL, enabled) }
+            gti.saveOriginalPhoto(enabled)
+        }
 
         settingsBinding.btnPrivacy.setOnClickListener {
             showInformationDialog(R.string.privacy_policy, R.string.privacy_policy_body)
@@ -234,6 +265,81 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(getString(url)))
         runCatching { startActivity(intent) }
             .onFailure { showMessage(getString(R.string.no_browser_available)) }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::gti.isInitialized && !locationPermissionRequestInFlight) {
+            if (hasLocationPermission()) unlockAppForLocation() else lockAppForLocation()
+        }
+    }
+
+    private fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun ensureLocationAccess() {
+        if (hasLocationPermission()) {
+            unlockAppForLocation()
+            return
+        }
+        binding.root.visibility = View.INVISIBLE
+        if (!preferences.getBoolean(PREF_LOCATION_REQUESTED, false)) {
+            requestLocationPermission()
+        } else {
+            showLocationRequiredDialog()
+        }
+    }
+
+    private fun requestLocationPermission() {
+        locationGateDialog?.dismiss()
+        locationPermissionRequestInFlight = true
+        preferences.edit { putBoolean(PREF_LOCATION_REQUESTED, true) }
+        permissionLauncher.launch(
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+        )
+    }
+
+    private fun unlockAppForLocation() {
+        locationGateDialog?.dismiss()
+        locationGateDialog = null
+        binding.root.visibility = View.VISIBLE
+    }
+
+    private fun lockAppForLocation() {
+        binding.root.visibility = View.INVISIBLE
+        showLocationRequiredDialog()
+    }
+
+    private fun showLocationRequiredDialog() {
+        if (isFinishing || isDestroyed || locationGateDialog?.isShowing == true) return
+        val canAskAgain = shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION) ||
+            shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_COARSE_LOCATION)
+        val positiveLabel = if (canAskAgain) R.string.allow_location else R.string.open_app_settings
+        locationGateDialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.location_required_title)
+            .setMessage(R.string.location_required_message)
+            .setCancelable(false)
+            .setNegativeButton(R.string.exit_app) { _, _ -> finishAffinity() }
+            .setPositiveButton(positiveLabel) { _, _ ->
+                if (canAskAgain) {
+                    requestLocationPermission()
+                } else {
+                    startActivity(
+                        Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.fromParts("package", packageName, null)
+                        )
+                    )
+                }
+            }
+            .create()
+            .also { it.show() }
     }
 
     private fun setupCaptureActions() {
@@ -594,6 +700,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             description = R.string.template_classic_description,
             previewTitle = R.string.template_preview_classic_title,
             previewMetadata = R.string.template_preview_classic_metadata,
+            visual = TemplateVisual.CLASSIC,
             showMapPreview = true
         ) {
             applyTemplate(ImageStyle.SMART_AUTO, R.id.chipSmartAuto, R.string.template_active_classic)
@@ -605,6 +712,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             description = R.string.template_travel_description,
             previewTitle = R.string.template_preview_travel_title,
             previewMetadata = R.string.template_preview_travel_metadata,
+            visual = TemplateVisual.TRAVEL,
             showMapPreview = true
         ) {
             applyTemplate(ImageStyle.LANDSCAPE, R.id.chipLandscape, R.string.template_active_travel)
@@ -616,6 +724,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             description = R.string.template_clean_description,
             previewTitle = R.string.template_preview_clean_title,
             previewMetadata = R.string.template_preview_clean_metadata,
+            visual = TemplateVisual.CLEAN,
             showMapPreview = false
         ) {
             applyTemplate(ImageStyle.SQUARE, R.id.chipSquare, R.string.template_active_clean)
@@ -627,6 +736,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             description = R.string.template_evidence_description,
             previewTitle = R.string.template_preview_evidence_title,
             previewMetadata = R.string.template_preview_evidence_metadata,
+            visual = TemplateVisual.EVIDENCE,
             showMapPreview = true
         ) {
             applyTemplate(ImageStyle.FIELD_PROOF, R.id.chipFieldProof, R.string.template_active_evidence)
@@ -640,6 +750,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         @StringRes description: Int,
         @StringRes previewTitle: Int,
         @StringRes previewMetadata: Int,
+        visual: TemplateVisual,
         showMapPreview: Boolean,
         onSelected: () -> Unit
     ) {
@@ -648,6 +759,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         templateBinding.tvTemplateDescription.setText(description)
         templateBinding.tvPreviewTitle.setText(previewTitle)
         templateBinding.tvPreviewMetadata.setText(previewMetadata)
+        styleTemplatePreview(templateBinding, visual)
         templateBinding.ivTemplateMap.visibility =
             if (showMapPreview) View.VISIBLE else View.GONE
         templateBinding.btnPreviewTemplate.setOnClickListener {
@@ -656,6 +768,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
                 name = name,
                 previewTitle = previewTitle,
                 previewMetadata = previewMetadata,
+                visual = visual,
                 showMapPreview = showMapPreview,
                 onSelected = onSelected
             )
@@ -663,11 +776,58 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         templateBinding.btnUseTemplate.setOnClickListener { onSelected() }
     }
 
+    private fun styleTemplatePreview(
+        templateBinding: ItemTemplatePreviewBinding,
+        visual: TemplateVisual
+    ) {
+        val overlay = templateBinding.previewOverlay
+        val params = overlay.layoutParams as FrameLayout.LayoutParams
+        val margin = (12 * resources.displayMetrics.density).toInt()
+        params.gravity = if (visual == TemplateVisual.TRAVEL) Gravity.TOP else Gravity.BOTTOM
+        params.marginStart = if (visual == TemplateVisual.CLEAN) margin else 0
+        params.marginEnd = if (visual == TemplateVisual.CLEAN) margin else 0
+        params.bottomMargin = if (visual == TemplateVisual.CLEAN) margin else 0
+        overlay.layoutParams = params
+
+        val background = when (visual) {
+            TemplateVisual.CLASSIC -> R.drawable.bg_template_classic
+            TemplateVisual.TRAVEL -> R.drawable.bg_template_travel
+            TemplateVisual.CLEAN -> R.drawable.bg_template_clean
+            TemplateVisual.EVIDENCE -> R.drawable.bg_template_evidence
+        }
+        overlay.setBackgroundResource(background)
+
+        val titleColor = when (visual) {
+            TemplateVisual.TRAVEL -> Color.rgb(255, 236, 190)
+            TemplateVisual.CLEAN -> Color.rgb(20, 24, 31)
+            TemplateVisual.EVIDENCE -> Color.rgb(255, 193, 7)
+            TemplateVisual.CLASSIC -> Color.WHITE
+        }
+        val metadataColor = if (visual == TemplateVisual.CLEAN) Color.rgb(70, 75, 83) else Color.WHITE
+        templateBinding.tvPreviewTitle.setTextColor(titleColor)
+        templateBinding.tvPreviewMetadata.setTextColor(metadataColor)
+        if (visual == TemplateVisual.EVIDENCE) {
+            templateBinding.tvPreviewTitle.typeface = android.graphics.Typeface.MONOSPACE
+            templateBinding.tvPreviewMetadata.typeface = android.graphics.Typeface.MONOSPACE
+            templateBinding.tvPreviewTitle.letterSpacing = 0.06f
+        }
+
+        val accent = when (visual) {
+            TemplateVisual.CLASSIC -> Color.WHITE
+            TemplateVisual.TRAVEL -> Color.rgb(255, 184, 92)
+            TemplateVisual.CLEAN -> Color.rgb(30, 41, 59)
+            TemplateVisual.EVIDENCE -> Color.rgb(255, 193, 7)
+        }
+        templateBinding.ivTemplateMap.imageTintList = ColorStateList.valueOf(accent)
+        templateBinding.root.strokeColor = accent
+    }
+
     private fun showTemplatePreview(
         @DrawableRes image: Int,
         @StringRes name: Int,
         @StringRes previewTitle: Int,
         @StringRes previewMetadata: Int,
+        visual: TemplateVisual,
         showMapPreview: Boolean,
         onSelected: () -> Unit
     ) {
@@ -678,6 +838,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         previewBinding.tvFullScreenTemplateName.setText(name)
         previewBinding.tvFullScreenPreviewTitle.setText(previewTitle)
         previewBinding.tvFullScreenPreviewMetadata.setText(previewMetadata)
+        styleFullScreenTemplatePreview(previewBinding, visual)
         previewBinding.ivFullScreenTemplateMap.visibility =
             if (showMapPreview) View.VISIBLE else View.GONE
         previewBinding.btnCloseTemplatePreview.setOnClickListener { dialog.dismiss() }
@@ -694,6 +855,52 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             )
         }
         dialog.show()
+    }
+
+    private fun styleFullScreenTemplatePreview(
+        previewBinding: DialogTemplatePreviewBinding,
+        visual: TemplateVisual
+    ) {
+        val overlay = previewBinding.fullScreenPreviewOverlay
+        val params = overlay.layoutParams as FrameLayout.LayoutParams
+        val margin = (16 * resources.displayMetrics.density).toInt()
+        params.gravity = if (visual == TemplateVisual.TRAVEL) Gravity.TOP else Gravity.BOTTOM
+        params.marginStart = if (visual == TemplateVisual.CLEAN) margin else 0
+        params.marginEnd = if (visual == TemplateVisual.CLEAN) margin else 0
+        params.bottomMargin = if (visual == TemplateVisual.CLEAN) margin else 0
+        overlay.layoutParams = params
+        overlay.setBackgroundResource(
+            when (visual) {
+                TemplateVisual.CLASSIC -> R.drawable.bg_template_classic
+                TemplateVisual.TRAVEL -> R.drawable.bg_template_travel
+                TemplateVisual.CLEAN -> R.drawable.bg_template_clean
+                TemplateVisual.EVIDENCE -> R.drawable.bg_template_evidence
+            }
+        )
+
+        val titleColor = when (visual) {
+            TemplateVisual.TRAVEL -> Color.rgb(255, 236, 190)
+            TemplateVisual.CLEAN -> Color.rgb(20, 24, 31)
+            TemplateVisual.EVIDENCE -> Color.rgb(255, 193, 7)
+            TemplateVisual.CLASSIC -> Color.WHITE
+        }
+        previewBinding.tvFullScreenPreviewTitle.setTextColor(titleColor)
+        previewBinding.tvFullScreenPreviewMetadata.setTextColor(
+            if (visual == TemplateVisual.CLEAN) Color.rgb(70, 75, 83) else Color.WHITE
+        )
+        if (visual == TemplateVisual.EVIDENCE) {
+            previewBinding.tvFullScreenPreviewTitle.typeface = android.graphics.Typeface.MONOSPACE
+            previewBinding.tvFullScreenPreviewMetadata.typeface = android.graphics.Typeface.MONOSPACE
+            previewBinding.tvFullScreenPreviewTitle.letterSpacing = 0.06f
+        }
+        previewBinding.ivFullScreenTemplateMap.imageTintList = ColorStateList.valueOf(
+            when (visual) {
+                TemplateVisual.CLASSIC -> Color.WHITE
+                TemplateVisual.TRAVEL -> Color.rgb(255, 184, 92)
+                TemplateVisual.CLEAN -> Color.rgb(30, 41, 59)
+                TemplateVisual.EVIDENCE -> Color.rgb(255, 193, 7)
+            }
+        )
     }
 
     private fun applyTemplate(style: ImageStyle, chipId: Int, @StringRes label: Int) {
@@ -1170,10 +1377,15 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     override fun onPermissionGranted() = Unit
 
     override fun onPermissionDenied() {
-        showMessage("Camera and location permissions are needed for smart geotag photos")
+        if (hasLocationPermission()) {
+            showMessage(getString(R.string.camera_permission_required))
+        } else {
+            lockAppForLocation()
+        }
     }
 
     override fun onDestroy() {
+        locationGateDialog?.dismiss()
         if (::recentAdapter.isInitialized) recentAdapter.release()
         if (::savedAdapter.isInitialized) savedAdapter.release()
         backgroundExecutor.shutdownNow()
@@ -1182,6 +1394,9 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     }
 
     companion object {
+        private const val PREFERENCES_NAME = "geo_tag_photo_settings"
+        private const val PREF_SAVE_ORIGINAL = "save_original_photo"
+        private const val PREF_LOCATION_REQUESTED = "location_permission_requested"
         private const val PREVIEW_MAX_SIDE = 1600
         private const val REVIEW_MAX_SIDE = 1600
     }

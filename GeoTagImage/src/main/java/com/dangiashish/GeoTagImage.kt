@@ -160,6 +160,7 @@ class GeoTagImage(
     private var customLatitude: Double? = null
     private var customLongitude: Double? = null
     private var customDateTimeMillis: Long? = null
+    private var saveOriginalPhoto = false
 
     // CameraX related variables
     private var useCameraX = false
@@ -903,6 +904,10 @@ class GeoTagImage(
                 bitmap = scaleToMaxSide(bitmap)
             }
 
+            if (geoTagged && saveOriginalPhoto) {
+                saveImageToGallery(bitmap, "ORIGINAL_")
+            }
+
             val finalBitmap = if (geoTagged) {
                 val tagged = drawTextOnBitmap(bitmap)
                 bitmap.recycle()
@@ -911,7 +916,10 @@ class GeoTagImage(
                 bitmap
             }
 
-            val savedUri = saveImageToGallery(finalBitmap)
+            val savedUri = saveImageToGallery(
+                finalBitmap,
+                if (geoTagged && saveOriginalPhoto) "GEOTAG_" else "IMG_"
+            )
             val outputStream = file.outputStream()
             finalBitmap.compress(outputCompressFormat(), outputQuality(), outputStream)
             outputStream.close()
@@ -1218,7 +1226,7 @@ class GeoTagImage(
     /**
      * Save image to gallery
      */
-    private fun saveImageToGallery(bitmap: Bitmap): Uri? {
+    private fun saveImageToGallery(bitmap: Bitmap, fileNamePrefix: String = "IMG_"): Uri? {
         val resolver = context.contentResolver
         val timeStamp: String =
             SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
@@ -1231,7 +1239,7 @@ class GeoTagImage(
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val contentValues = ContentValues().apply {
-                put(MediaStore.Images.Media.DISPLAY_NAME, "IMG_$timeStamp$imageExtension")
+                put(MediaStore.Images.Media.DISPLAY_NAME, "$fileNamePrefix$timeStamp$imageExtension")
                 put(MediaStore.Images.Media.MIME_TYPE, mimeType)
                 put(
                     MediaStore.Images.Media.RELATIVE_PATH,
@@ -1274,7 +1282,7 @@ class GeoTagImage(
             val imagesDir =
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
                     .toString() + "/" + directoryName
-            val file = File(imagesDir, "IMG_$timeStamp$imageExtension")
+            val file = File(imagesDir, "$fileNamePrefix$timeStamp$imageExtension")
 
             file.parentFile?.mkdirs()
             FileOutputStream(file).use { out ->
@@ -1365,14 +1373,31 @@ class GeoTagImage(
         }
 
         val textPaint = Paint().apply {
-            color = textColor
-            textSize = customTextSize
+            color = when (imageStyle) {
+                ImageStyle.SQUARE -> Color.rgb(20, 24, 31)
+                ImageStyle.LANDSCAPE -> Color.rgb(255, 244, 214)
+                else -> textColor
+            }
+            textSize = when (imageStyle) {
+                ImageStyle.LANDSCAPE -> customTextSize * 1.08f
+                ImageStyle.FIELD_PROOF -> customTextSize * 0.94f
+                else -> customTextSize
+            }
             isAntiAlias = true
-            setShadowLayer(1f, 0f, 1f, Color.BLACK)
+            typeface = when (imageStyle) {
+                ImageStyle.LANDSCAPE, ImageStyle.FIELD_PROOF -> Typeface.DEFAULT_BOLD
+                else -> this@GeoTagImage.typeface
+            }
+            if (imageStyle != ImageStyle.SQUARE) setShadowLayer(1f, 0f, 1f, Color.BLACK)
         }
 
         val bgPaint = Paint().apply {
-            color = backgroundColor
+            color = when (imageStyle) {
+                ImageStyle.LANDSCAPE -> Color.argb(220, 55, 35, 18)
+                ImageStyle.SQUARE -> Color.argb(235, 255, 255, 255)
+                ImageStyle.FIELD_PROOF -> Color.argb(240, 8, 25, 42)
+                else -> backgroundColor
+            }
         }
 
         val design = Paint()
@@ -1385,14 +1410,12 @@ class GeoTagImage(
             0
         }
 
-        val maxTextWidth = result.width - effectiveMapWidth - 60
-
-        mapBitmap?.let {
-            if (effectiveMapWidth > 0 && mapHeight > 0) {
-                val scaledMap = it.scale(effectiveMapWidth, mapHeight, false)
-                canvas.drawBitmap(scaledMap, 10f, canvas.height - 160f, design)
-            }
-        }
+        val edge = 20f
+        val gap = 16f
+        val maxTextWidth = when (imageStyle) {
+            ImageStyle.SQUARE -> result.width - 96
+            else -> result.width - effectiveMapWidth - 80
+        }.coerceAtLeast(220)
         fun wrapText(line: String, paint: Paint, maxWidth: Int): List<String> {
             val words = line.split(" ")
             val lines = mutableListOf<String>()
@@ -1421,15 +1444,60 @@ class GeoTagImage(
         }
 
         val textHeight = textPaint.fontMetrics.run { bottom - top }
-        val blockHeight = allWrappedLines.size * (textHeight + lineSpacing)
-        val blockWidth = maxTextWidth + padding * 2
+        val blockHeight = allWrappedLines.size * (textHeight + lineSpacing) + padding * 2
+        val left: Float
+        val top: Float
+        val right: Float
+        val bottom: Float
 
-        val left = mapWidth + 20f
-        val top = result.height - blockHeight - 30f
-        val right = left + blockWidth - 10f
-        val bottom = top + blockHeight + padding
+        when (imageStyle) {
+            ImageStyle.LANDSCAPE -> {
+                left = edge
+                top = edge
+                right = result.width - effectiveMapWidth - edge - if (effectiveMapWidth > 0) gap else 0f
+                bottom = top + blockHeight
+            }
+            ImageStyle.SQUARE -> {
+                left = 28f
+                right = result.width - 28f
+                bottom = result.height - 28f
+                top = bottom - blockHeight
+            }
+            ImageStyle.FIELD_PROOF -> {
+                left = edge
+                right = result.width - effectiveMapWidth - edge - if (effectiveMapWidth > 0) gap else 0f
+                bottom = result.height - edge
+                top = bottom - blockHeight
+            }
+            else -> {
+                left = effectiveMapWidth + edge + if (effectiveMapWidth > 0) gap else 0f
+                right = result.width - edge
+                bottom = result.height - edge
+                top = bottom - blockHeight
+            }
+        }
 
-        canvas.drawRoundRect(RectF(left, top, right, bottom), 12f, 12f, bgPaint)
+        val cornerRadius = if (imageStyle == ImageStyle.FIELD_PROOF) 4f else 18f
+        canvas.drawRoundRect(RectF(left, top, right, bottom), cornerRadius, cornerRadius, bgPaint)
+
+        if (imageStyle == ImageStyle.FIELD_PROOF) {
+            Paint().apply { color = Color.rgb(255, 193, 7); strokeWidth = 8f }.also {
+                canvas.drawLine(left, top, right, top, it)
+            }
+        }
+
+        mapBitmap?.let {
+            if (effectiveMapWidth > 0 && mapHeight > 0) {
+                val scaledMap = it.scale(effectiveMapWidth, mapHeight, false)
+                val mapLeft = if (imageStyle == ImageStyle.LANDSCAPE || imageStyle == ImageStyle.FIELD_PROOF) {
+                    result.width - effectiveMapWidth - edge
+                } else {
+                    edge
+                }
+                val mapTop = if (imageStyle == ImageStyle.LANDSCAPE) edge else result.height - mapHeight - edge
+                canvas.drawBitmap(scaledMap, mapLeft, mapTop, design)
+            }
+        }
 
         var y = top + padding - textPaint.fontMetrics.top
         allWrappedLines.forEach { line ->
@@ -1703,6 +1771,11 @@ class GeoTagImage(
     fun enableAutoStraighten(enabled: Boolean) {
         autoStraightenEnabled = enabled
         updateLevelUi()
+    }
+
+    /** Saves a second, clean copy before the visible geo tag is drawn. Disabled by default. */
+    fun saveOriginalPhoto(enabled: Boolean) {
+        saveOriginalPhoto = enabled
     }
 
     /**
