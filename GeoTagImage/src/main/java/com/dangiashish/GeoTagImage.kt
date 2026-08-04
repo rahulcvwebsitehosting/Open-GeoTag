@@ -37,6 +37,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
+import android.graphics.ImageDecoder
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
@@ -950,9 +951,10 @@ class GeoTagImage(
         val prepareAndRender: () -> Unit = {
             loadMapForCurrentLocation {
                 // Render, write and index the copy off the main thread; only the
-                // result callback is delivered on the main thread.
+                // result callback is delivered on the main thread. Failures inside
+                // the render are surfaced as null so the caller always gets a result.
                 executorService.execute {
-                    val savedUri = renderTaggedCopy(sourceUri)
+                    val savedUri = runCatching { renderTaggedCopy(sourceUri) }.getOrNull()
                     ContextCompat.getMainExecutor(context).execute {
                         onProcessed(savedUri)
                     }
@@ -969,19 +971,10 @@ class GeoTagImage(
     }
 
     private fun renderTaggedCopy(sourceUri: Uri): Uri? {
-        val sourceBitmap = runCatching {
-            val input = if (sourceUri.scheme == ContentResolver.SCHEME_FILE) {
-                File(sourceUri.path ?: return null).inputStream()
-            } else {
-                contentResolverOrNull()?.openInputStream(sourceUri)
-            }
-            input?.use { inputStream ->
-                BitmapFactory.decodeStream(inputStream)
-            }
-        }.getOrNull() ?: return null
+        val sourceBitmap = decodeTagSource(sourceUri) ?: return null
 
         var bitmap = sourceBitmap
-        val scaled = scaleToMaxSide(bitmap, 1280)
+        val scaled = scaleToMaxSide(bitmap, TAG_OUTPUT_MAX_SIDE)
         if (scaled != bitmap) {
             bitmap.recycle()
             bitmap = scaled
@@ -1010,6 +1003,76 @@ class GeoTagImage(
 
         finalBitmap.recycle()
         return savedUri
+    }
+
+    /**
+     * Decodes the source image down to at most [TAG_OUTPUT_MAX_SIDE] pixels on its
+     * longest side. Sampling first keeps large gallery photos from exhausting the
+     * heap, and EXIF orientation is applied so the tagged copy is not rotated.
+     */
+    private fun decodeTagSource(sourceUri: Uri): Bitmap? = runCatching {
+        val sourceFile = if (sourceUri.scheme == ContentResolver.SCHEME_FILE) {
+            File(sourceUri.path ?: return null).takeIf(File::exists)
+        } else {
+            null
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val decoderSource = if (sourceFile != null) {
+                ImageDecoder.createSource(sourceFile)
+            } else {
+                ImageDecoder.createSource(context.contentResolver, sourceUri)
+            }
+            ImageDecoder.decodeBitmap(decoderSource) { decoder, info, _ ->
+                val largest = maxOf(info.size.width, info.size.height)
+                if (largest > TAG_OUTPUT_MAX_SIDE) {
+                    val scale = TAG_OUTPUT_MAX_SIDE.toFloat() / largest
+                    decoder.setTargetSize(
+                        (info.size.width * scale).toInt(),
+                        (info.size.height * scale).toInt()
+                    )
+                }
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+        } else {
+            val openInput: () -> java.io.InputStream? = {
+                if (sourceFile != null) {
+                    sourceFile.inputStream()
+                } else {
+                    contentResolverOrNull()?.openInputStream(sourceUri)
+                }
+            }
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            openInput()?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            var sample = 1
+            while (maxOf(bounds.outWidth, bounds.outHeight) / sample > TAG_OUTPUT_MAX_SIDE) {
+                sample *= 2
+            }
+            val options = BitmapFactory.Options().apply { inSampleSize = sample }
+            val decoded = openInput()?.use { BitmapFactory.decodeStream(it, null, options) } ?: return null
+            val orientation = runCatching {
+                openInput()?.use {
+                    ExifInterface(it).getAttributeInt(
+                        ExifInterface.TAG_ORIENTATION,
+                        ExifInterface.ORIENTATION_NORMAL
+                    )
+                }
+            }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+            when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> rotateBitmap(decoded, 90f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> rotateBitmap(decoded, 180f)
+                ExifInterface.ORIENTATION_ROTATE_270 -> rotateBitmap(decoded, 270f)
+                else -> decoded
+            }
+        }
+    }.getOrNull()
+
+    private fun rotateBitmap(bitmap: Bitmap, degrees: Float): Bitmap {
+        val rotated = Bitmap.createBitmap(
+            bitmap, 0, 0, bitmap.width, bitmap.height,
+            Matrix().apply { postRotate(degrees) }, true
+        )
+        if (rotated != bitmap) bitmap.recycle()
+        return rotated
     }
 
     private fun contentResolverOrNull() = (context as? Activity)?.contentResolver ?: context.contentResolver
@@ -1177,29 +1240,34 @@ class GeoTagImage(
                 put(MediaStore.Images.Media.IS_PENDING, 1)
             }
 
-            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-            uri?.let {
-                resolver.openOutputStream(it)?.use { out ->
+            val uri = runCatching {
+                resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+            }.getOrNull() ?: return null
+            // Verify the bytes were actually written; otherwise remove the empty
+            // row instead of leaving a broken image behind in the gallery.
+            val wrote = runCatching {
+                resolver.openOutputStream(uri)?.use { out ->
                     bitmap.compress(outputCompressFormat(), outputQuality(), out)
-                }
-                contentValues.clear()
-                contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
-                resolver.update(uri, contentValues, null, null)
+                } ?: false
+            }.getOrDefault(false)
+            contentValues.clear()
+            contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
+            runCatching { resolver.update(uri, contentValues, null, null) }
+            if (!wrote) {
+                runCatching { resolver.delete(uri, null, null) }
+                return null
             }
             effectiveExifLocation()?.let { location ->
-                uri?.let {
-                    try {
-                        context.contentResolver.openFileDescriptor(it, "rw")?.use { pfd ->
-                            val exif = ExifInterface(pfd.fileDescriptor)
-                            if (isEnabled) {
-                                setExif(exif, location)
-                            }
+                try {
+                    context.contentResolver.openFileDescriptor(uri, "rw")?.use { pfd ->
+                        val exif = ExifInterface(pfd.fileDescriptor)
+                        if (isEnabled) {
+                            setExif(exif, location)
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, ">Q Error writing EXIF via URI: ${e.localizedMessage}")
                     }
+                } catch (e: Exception) {
+                    Log.e(TAG, ">Q Error writing EXIF via URI: ${e.localizedMessage}")
                 }
-
             }
             uri
         } else {
@@ -1817,6 +1885,7 @@ class GeoTagImage(
         const val RATIO_AUTO = 4
         private const val MAX_AUTO_STRAIGHTEN_DEGREES = 12f
         private const val DEFAULT_MAP_WIDTH = 140
+        private const val TAG_OUTPUT_MAX_SIDE = 1280
         private const val MAP_TIMEOUT_MS = 4_000
         private const val GEOCODING_TIMEOUT_MS = 5_000L
     }
