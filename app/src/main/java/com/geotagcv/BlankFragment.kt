@@ -22,12 +22,16 @@ package com.geotagcv
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
@@ -40,6 +44,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.geotagcv.databinding.FragmentBlankBinding
 import com.dangiashish.PermissionCallback
@@ -54,7 +59,9 @@ class BlankFragment : Fragment(), PermissionCallback {
     private lateinit var permissionLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var cameraLauncher: ActivityResultLauncher<Uri>
     private val TAG = "BlankFragmentLog"
-    private val binding: FragmentBlankBinding by lazy { FragmentBlankBinding.inflate(layoutInflater) }
+    private var _binding: FragmentBlankBinding? = null
+    private val binding: FragmentBlankBinding get() = requireNotNull(_binding)
+    private var previewBitmap: Bitmap? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,15 +72,24 @@ class BlankFragment : Fragment(), PermissionCallback {
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
+        _binding = FragmentBlankBinding.inflate(inflater, container, false)
         // initialize the context
         mContext = requireActivity()
 
         permissionLauncher = registerForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions()
         ) { permissions ->
-            val allGranted = permissions.all { it.value }
+            val cameraGranted = permissions[Manifest.permission.CAMERA] == true ||
+                ContextCompat.checkSelfPermission(mContext, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED
+            val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
+                ContextCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
 
-            if (allGranted) {
+            if (cameraGranted && locationGranted) {
                 onPermissionGranted()
             } else {
                 onPermissionDenied()
@@ -229,6 +245,7 @@ class BlankFragment : Fragment(), PermissionCallback {
     }
 
     private fun previewCapturedImage() {
+        val binding = _binding ?: return
         gtiUri?.let { uri ->
             binding.ivImage.let { imageView ->
                 try {
@@ -243,19 +260,23 @@ class BlankFragment : Fragment(), PermissionCallback {
                         @Suppress("DEPRECATION")
                         MediaStore.Images.Media.getBitmap(mContext.contentResolver, uri)
                     }
+                    previewBitmap?.recycle()
+                    previewBitmap = bitmap
                     imageView.setImageBitmap(bitmap)
                     imageView.visibility = View.VISIBLE
                     binding.ivClose.visibility = View.VISIBLE
                     binding.progressBar.visibility = View.GONE
 
                     binding.tvGTIPath.text = gtiUri?.path
-                    binding.tvImgSize.text = getFileSize(gtiUri?.path!!)
+                    binding.tvImgSize.text = getFileSize(uri)
 
                 } catch (e: Exception) {
                     Log.e(TAG, "Error loading image: ${e.message}")
                 }
             }
             binding.ivClose.setOnClickListener { v: View? ->
+                previewBitmap?.recycle()
+                previewBitmap = null
                 binding.ivImage.setImageBitmap(null)
                 binding.ivCamera.visibility = View.VISIBLE
                 binding.ivClose.visibility = View.GONE
@@ -266,11 +287,21 @@ class BlankFragment : Fragment(), PermissionCallback {
         }
     }
 
-    private fun getFileSize(filePath: String?): String {
-        val file = filePath?.let { File(it) }
-
-        if (file!!.exists()) {
-            val fileSizeInBytes = file.length()
+    private fun getFileSize(uri: Uri): String {
+        val fileSizeInBytes = runCatching {
+            mContext.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.SIZE),
+                null,
+                null,
+                null
+            )?.use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else 0L }
+        }.getOrNull() ?: if (uri.scheme == "file") {
+            uri.path?.let(::File)?.takeIf(File::exists)?.length() ?: 0L
+        } else {
+            0L
+        }
+        if (fileSizeInBytes > 0L) {
             val fileSizeInKB = fileSizeInBytes / 1024.0
             val fileSizeInMB = fileSizeInKB / 1024.0
 
@@ -281,9 +312,8 @@ class BlankFragment : Fragment(), PermissionCallback {
                 fileSizeInKB >= 1 -> "~ ${decimalFormat.format(fileSizeInKB)} KB"
                 else -> "~ $fileSizeInBytes Bytes" // Return size in Bytes
             }
-        } else {
-            return ""
         }
+        return ""
     }
 
     override fun onPermissionGranted() {
@@ -291,7 +321,16 @@ class BlankFragment : Fragment(), PermissionCallback {
     }
 
     override fun onPermissionDenied() {
-        geoTagImage.requestCameraAndLocationPermissions()
+        Toast.makeText(mContext, "Camera and location permissions are required", Toast.LENGTH_LONG).show()
+    }
+
+    override fun onDestroyView() {
+        _binding?.ivImage?.setImageDrawable(null)
+        previewBitmap?.recycle()
+        previewBitmap = null
+        if (::geoTagImage.isInitialized) geoTagImage.cleanup()
+        _binding = null
+        super.onDestroyView()
     }
 
     private fun viewInGallery(gtiImageStoragePath: String) {

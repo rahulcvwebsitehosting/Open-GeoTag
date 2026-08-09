@@ -57,7 +57,8 @@
             android:layout_height="48dp"
             android:background="@drawable/bg_circle_trans"
             android:clickable="true"
-            android:contentDescription="Flash mode"
+            android:focusable="true"
+            android:contentDescription="@string/gti_flash_mode"
             android:foreground="?attr/selectableItemBackgroundBorderless"
             android:padding="12dp"
             android:tint="@android:color/white"
@@ -77,7 +78,7 @@
                 android:id="@+id/tvSmartMode"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Smart • Portrait 4:3"
+                android:text="@string/gti_smart_portrait"
                 android:textColor="@android:color/white"
                 android:textSize="14sp"
                 android:textStyle="bold" />
@@ -89,7 +90,7 @@
                 android:layout_marginTop="2dp"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:text="Alignment correction on"
+                android:text="@string/gti_alignment_on"
                 android:textColor="#CCFFFFFF"
                 android:textSize="11sp" />
         </LinearLayout>
@@ -114,7 +115,7 @@
         android:background="@drawable/zoom_bubble"
         android:paddingHorizontal="10dp"
         android:paddingVertical="5dp"
-        android:text="Level"
+        android:text="@string/gti_level"
         android:textColor="@android:color/white"
         android:textSize="12sp"
         app:layout_constraintEnd_toEndOf="@id/horizonLine"
@@ -137,7 +138,7 @@
             android:id="@+id/zoomValue"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="1.0x"
+            android:text="@string/gti_zoom_default"
             android:textColor="@android:color/white"
             android:textSize="14sp"
             android:background="@drawable/zoom_bubble"
@@ -149,7 +150,6 @@
             android:id="@+id/zoomSeekBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_centerVertical="true"
             android:max="100"
             android:progress="0"/>
 
@@ -175,7 +175,8 @@
             android:padding="10dp"
             android:foreground="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
-            android:contentDescription="Close camera"
+            android:focusable="true"
+            android:contentDescription="@string/gti_close_camera"
             android:src="@drawable/outline_close_24"
             android:tint="@android:color/white"/>
 
@@ -186,7 +187,10 @@
             android:layout_gravity="center"
             android:layout_marginHorizontal="40dp"
             android:background="@drawable/bg_capture"
-            android:contentDescription="Take photo">
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/gti_take_photo">
 
             <View
                 android:layout_width="56dp"
@@ -204,7 +208,8 @@
             android:padding="10dp"
             android:foreground="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
-            android:contentDescription="Switch camera"
+            android:focusable="true"
+            android:contentDescription="@string/gti_switch_camera"
             android:src="@drawable/outline_flip_camera_android_24"
             android:tint="#FFFFFF" />
     </LinearLayout>

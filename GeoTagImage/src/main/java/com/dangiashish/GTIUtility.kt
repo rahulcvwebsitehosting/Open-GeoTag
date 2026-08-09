@@ -154,7 +154,7 @@ object GTIUtility {
         return "$countryName $flag "
     }
 
-    fun decodeSampledBitmap(path: String, reqWidth: Int, reqHeight: Int): Bitmap {
+    fun decodeSampledBitmap(path: String, reqWidth: Int, reqHeight: Int): Bitmap? {
         return BitmapFactory.Options().run {
             inJustDecodeBounds = true
             BitmapFactory.decodeFile(path, this)

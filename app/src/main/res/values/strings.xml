@@ -24,7 +24,23 @@
 
 <resources>
     <string name="app_name">Geo Tag Photo</string>
-    <string name="hello_blank_fragment">Hello blank fragment</string>
+    <string name="legacy_gti_stack" translatable="false">G\nT\nI</string>
+    <string name="legacy_camerax_api">CameraX API</string>
+    <string name="legacy_system_camera">System camera</string>
+    <string name="legacy_image_path">GTI image path:</string>
+    <string name="legacy_image_size">GTI image size:</string>
+    <string name="legacy_enable_features">Enable GTI features:</string>
+    <string name="legacy_show_author">Show author name:</string>
+    <string name="legacy_enter_author">Enter author name</string>
+    <string name="legacy_show_app">Show app name:</string>
+    <string name="legacy_enter_app">Enter app name (custom)</string>
+    <string name="legacy_show_coordinates">Show coordinates:</string>
+    <string name="legacy_show_date">Show date:</string>
+    <string name="legacy_show_map">Show map:</string>
+    <string name="legacy_set_extension">Image format:</string>
+    <string name="image_format_png" translatable="false">PNG</string>
+    <string name="image_format_jpeg" translatable="false">JPEG</string>
+    <string name="legacy_view_github">View on GitHub</string>
     <string name="smart_capture_label">SMART CAPTURE</string>
     <string name="home_headline">Point. Frame. Done.</string>
     <string name="home_subtitle">The camera chooses the ratio, detects landscape shots, and keeps your photo level.</string>
@@ -159,6 +175,9 @@
     <string name="template_preview_clean_metadata">02 Aug 2026 • 04:45 PM</string>
     <string name="template_preview_evidence_title">FIELD RECORD • GPS VERIFIED</string>
     <string name="template_preview_evidence_metadata">Erode Sengunthar Engineering College\n02 Aug 2026 • 04:45 PM</string>
+    <string name="template_eyebrow_classic">SATELLITE • LIVE LOCATION</string>
+    <string name="template_eyebrow_travel">TRAVEL LOG / DAY 02</string>
+    <string name="template_eyebrow_evidence">REC 01 • GPS VERIFIED</string>
     <string name="template_active_classic">Active template: Classic geo tag</string>
     <string name="template_active_travel">Active template: Travel landscape</string>
     <string name="template_active_clean">Active template: Clean social</string>

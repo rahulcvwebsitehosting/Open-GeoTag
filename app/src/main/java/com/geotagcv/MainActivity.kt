@@ -16,6 +16,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.ImageDecoder
+import android.graphics.Typeface
 import android.location.Geocoder
 import android.net.Uri
 import android.os.Build
@@ -27,12 +28,14 @@ import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.Toast
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.enableEdgeToEdge
 import androidx.annotation.StringRes
 import androidx.annotation.DrawableRes
 import androidx.appcompat.app.AlertDialog
@@ -40,6 +43,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.edit
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.dangiashish.GeoTagImage
@@ -80,6 +85,8 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     private var tagPhotoDialog: Dialog? = null
     private var tagPhotoReviewBinding: DialogTagPhotoReviewBinding? = null
     private var tagPhotoPreviewBitmap: Bitmap? = null
+    private var capturedPreviewBitmap: Bitmap? = null
+    private var previewRequestVersion = 0
     private lateinit var photoPickerLauncher: ActivityResultLauncher<PickVisualMediaRequest>
     private lateinit var documentLauncher: ActivityResultLauncher<Array<String>>
     private var tagPhotoLocation: TagPhotoLocation? = null
@@ -87,6 +94,8 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     private val preferences by lazy { getSharedPreferences(PREFERENCES_NAME, MODE_PRIVATE) }
     private var locationPermissionRequestInFlight = false
     private var locationGateDialog: AlertDialog? = null
+    private var customLocationRequestVersion = 0
+    private var tagLocationRequestVersion = 0
 
     private enum class TemplateVisual { CLASSIC, TRAVEL, CLEAN, EVIDENCE }
 
@@ -111,7 +120,13 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContentView(binding.root)
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+            insets
+        }
         binding.root.visibility = View.INVISIBLE
 
         permissionLauncher = registerForActivityResult(
@@ -366,12 +381,16 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         }
 
         binding.ivClose.setOnClickListener {
+            previewRequestVersion++
+            capturedPreviewBitmap?.recycle()
+            capturedPreviewBitmap = null
             binding.ivImage.setImageDrawable(null)
             binding.ivImage.visibility = View.GONE
             binding.ivClose.visibility = View.GONE
             binding.tvPhotoInsight.visibility = View.GONE
             binding.cardResult.visibility = View.GONE
             binding.emptyState.visibility = View.VISIBLE
+            binding.progressBar.visibility = View.GONE
             gtiUri = null
         }
     }
@@ -563,6 +582,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
 
     private fun applyCustomLocation() {
         if (!binding.customMetadataSwitch.isChecked || updatingMetadataFields) return
+        customLocationRequestVersion++
         val latitudeText = binding.etCustomLatitude.text?.toString()?.trim().orEmpty()
         val longitudeText = binding.etCustomLongitude.text?.toString()?.trim().orEmpty()
         val latitude = latitudeText.toDoubleOrNull()
@@ -662,6 +682,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     }
 
     private fun resolvePickedAddress(latitude: Double, longitude: Double) {
+        val requestVersion = ++customLocationRequestVersion
         backgroundExecutor.execute {
             val result = runCatching {
                 @Suppress("DEPRECATION")
@@ -670,7 +691,10 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
                     ?.firstOrNull()
             }.getOrNull()
             runOnUiThread {
-                if (result == null || isFinishing || isDestroyed) return@runOnUiThread
+                if (result == null || isFinishing || isDestroyed ||
+                    requestVersion != customLocationRequestVersion ||
+                    !binding.customMetadataSwitch.isChecked
+                ) return@runOnUiThread
                 updatingMetadataFields = true
                 binding.etCustomPlace.setText(
                     result.locality ?: result.subAdminArea ?: result.adminArea.orEmpty()
@@ -782,11 +806,13 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     ) {
         val overlay = templateBinding.previewOverlay
         val params = overlay.layoutParams as FrameLayout.LayoutParams
-        val margin = (12 * resources.displayMetrics.density).toInt()
+        val density = resources.displayMetrics.density
+        val floatingMargin = ((if (visual == TemplateVisual.CLEAN) 14 else 10) * density).toInt()
         params.gravity = if (visual == TemplateVisual.TRAVEL) Gravity.TOP else Gravity.BOTTOM
-        params.marginStart = if (visual == TemplateVisual.CLEAN) margin else 0
-        params.marginEnd = if (visual == TemplateVisual.CLEAN) margin else 0
-        params.bottomMargin = if (visual == TemplateVisual.CLEAN) margin else 0
+        params.marginStart = if (visual == TemplateVisual.TRAVEL || visual == TemplateVisual.CLEAN) floatingMargin else 0
+        params.marginEnd = if (visual == TemplateVisual.TRAVEL || visual == TemplateVisual.CLEAN) floatingMargin else 0
+        params.topMargin = if (visual == TemplateVisual.TRAVEL) floatingMargin else 0
+        params.bottomMargin = if (visual == TemplateVisual.CLEAN) floatingMargin else 0
         overlay.layoutParams = params
 
         val background = when (visual) {
@@ -797,6 +823,21 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         }
         overlay.setBackgroundResource(background)
 
+        val horizontalPadding = ((if (visual == TemplateVisual.CLEAN) 18 else 14) * density).toInt()
+        val verticalPadding = ((if (visual == TemplateVisual.EVIDENCE) 12 else 10) * density).toInt()
+        overlay.setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
+
+        val eyebrow = templateBinding.tvPreviewEyebrow
+        eyebrow.visibility = if (visual == TemplateVisual.CLEAN) View.GONE else View.VISIBLE
+        eyebrow.setText(
+            when (visual) {
+                TemplateVisual.CLASSIC -> R.string.template_eyebrow_classic
+                TemplateVisual.TRAVEL -> R.string.template_eyebrow_travel
+                TemplateVisual.EVIDENCE -> R.string.template_eyebrow_evidence
+                TemplateVisual.CLEAN -> R.string.template_eyebrow_classic
+            }
+        )
+
         val titleColor = when (visual) {
             TemplateVisual.TRAVEL -> Color.rgb(255, 236, 190)
             TemplateVisual.CLEAN -> Color.rgb(20, 24, 31)
@@ -806,10 +847,39 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         val metadataColor = if (visual == TemplateVisual.CLEAN) Color.rgb(70, 75, 83) else Color.WHITE
         templateBinding.tvPreviewTitle.setTextColor(titleColor)
         templateBinding.tvPreviewMetadata.setTextColor(metadataColor)
-        if (visual == TemplateVisual.EVIDENCE) {
-            templateBinding.tvPreviewTitle.typeface = android.graphics.Typeface.MONOSPACE
-            templateBinding.tvPreviewMetadata.typeface = android.graphics.Typeface.MONOSPACE
-            templateBinding.tvPreviewTitle.letterSpacing = 0.06f
+        eyebrow.setTextColor(
+            when (visual) {
+                TemplateVisual.TRAVEL -> Color.rgb(255, 184, 92)
+                TemplateVisual.EVIDENCE -> Color.rgb(255, 193, 7)
+                else -> Color.rgb(194, 222, 255)
+            }
+        )
+        eyebrow.letterSpacing = if (visual == TemplateVisual.EVIDENCE) 0.16f else 0.1f
+
+        when (visual) {
+            TemplateVisual.CLASSIC -> {
+                templateBinding.tvPreviewTitle.typeface = Typeface.DEFAULT_BOLD
+                templateBinding.tvPreviewTitle.textSize = 14f
+                templateBinding.tvPreviewMetadata.typeface = Typeface.DEFAULT
+            }
+            TemplateVisual.TRAVEL -> {
+                templateBinding.tvPreviewTitle.typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD)
+                templateBinding.tvPreviewTitle.textSize = 16f
+                templateBinding.tvPreviewMetadata.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+            }
+            TemplateVisual.CLEAN -> {
+                templateBinding.previewTextGroup.gravity = Gravity.CENTER_HORIZONTAL
+                templateBinding.tvPreviewTitle.gravity = Gravity.CENTER
+                templateBinding.tvPreviewMetadata.gravity = Gravity.CENTER
+                templateBinding.tvPreviewTitle.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                templateBinding.tvPreviewTitle.textSize = 16f
+            }
+            TemplateVisual.EVIDENCE -> {
+                templateBinding.tvPreviewTitle.typeface = Typeface.MONOSPACE
+                templateBinding.tvPreviewMetadata.typeface = Typeface.MONOSPACE
+                templateBinding.tvPreviewTitle.textSize = 13f
+                templateBinding.tvPreviewTitle.letterSpacing = 0.06f
+            }
         }
 
         val accent = when (visual) {
@@ -819,6 +889,32 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             TemplateVisual.EVIDENCE -> Color.rgb(255, 193, 7)
         }
         templateBinding.ivTemplateMap.imageTintList = ColorStateList.valueOf(accent)
+        templateBinding.ivTemplateMap.setBackgroundResource(
+            when (visual) {
+                TemplateVisual.CLASSIC -> R.drawable.bg_template_map_classic
+                TemplateVisual.TRAVEL -> R.drawable.bg_template_map_travel
+                TemplateVisual.CLEAN -> R.drawable.bg_template_map
+                TemplateVisual.EVIDENCE -> R.drawable.bg_template_map_evidence
+            }
+        )
+        if (visual == TemplateVisual.CLASSIC) {
+            overlay.removeView(templateBinding.ivTemplateMap)
+            overlay.addView(templateBinding.ivTemplateMap, 0)
+        }
+        (templateBinding.ivTemplateMap.layoutParams as LinearLayout.LayoutParams).apply {
+            width = ((when (visual) {
+                TemplateVisual.TRAVEL -> 76
+                TemplateVisual.EVIDENCE -> 68
+                else -> 64
+            }) * density).toInt()
+            height = ((when (visual) {
+                TemplateVisual.TRAVEL -> 54
+                TemplateVisual.EVIDENCE -> 52
+                else -> 48
+            }) * density).toInt()
+            marginStart = if (visual == TemplateVisual.CLASSIC) 0 else (10 * density).toInt()
+            marginEnd = if (visual == TemplateVisual.CLASSIC) (12 * density).toInt() else 0
+        }
         templateBinding.root.strokeColor = accent
     }
 
@@ -863,10 +959,12 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     ) {
         val overlay = previewBinding.fullScreenPreviewOverlay
         val params = overlay.layoutParams as FrameLayout.LayoutParams
-        val margin = (16 * resources.displayMetrics.density).toInt()
+        val density = resources.displayMetrics.density
+        val margin = ((if (visual == TemplateVisual.CLEAN) 20 else 16) * density).toInt()
         params.gravity = if (visual == TemplateVisual.TRAVEL) Gravity.TOP else Gravity.BOTTOM
-        params.marginStart = if (visual == TemplateVisual.CLEAN) margin else 0
-        params.marginEnd = if (visual == TemplateVisual.CLEAN) margin else 0
+        params.marginStart = if (visual == TemplateVisual.CLEAN || visual == TemplateVisual.TRAVEL) margin else 0
+        params.marginEnd = if (visual == TemplateVisual.CLEAN || visual == TemplateVisual.TRAVEL) margin else 0
+        params.topMargin = if (visual == TemplateVisual.TRAVEL) margin else 0
         params.bottomMargin = if (visual == TemplateVisual.CLEAN) margin else 0
         overlay.layoutParams = params
         overlay.setBackgroundResource(
@@ -875,6 +973,20 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
                 TemplateVisual.TRAVEL -> R.drawable.bg_template_travel
                 TemplateVisual.CLEAN -> R.drawable.bg_template_clean
                 TemplateVisual.EVIDENCE -> R.drawable.bg_template_evidence
+            }
+        )
+        val horizontalPadding = ((if (visual == TemplateVisual.CLEAN) 22 else 18) * density).toInt()
+        val verticalPadding = ((if (visual == TemplateVisual.EVIDENCE) 16 else 14) * density).toInt()
+        overlay.setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
+
+        val eyebrow = previewBinding.tvFullScreenPreviewEyebrow
+        eyebrow.visibility = if (visual == TemplateVisual.CLEAN) View.GONE else View.VISIBLE
+        eyebrow.setText(
+            when (visual) {
+                TemplateVisual.CLASSIC -> R.string.template_eyebrow_classic
+                TemplateVisual.TRAVEL -> R.string.template_eyebrow_travel
+                TemplateVisual.EVIDENCE -> R.string.template_eyebrow_evidence
+                TemplateVisual.CLEAN -> R.string.template_eyebrow_classic
             }
         )
 
@@ -888,19 +1000,58 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         previewBinding.tvFullScreenPreviewMetadata.setTextColor(
             if (visual == TemplateVisual.CLEAN) Color.rgb(70, 75, 83) else Color.WHITE
         )
-        if (visual == TemplateVisual.EVIDENCE) {
-            previewBinding.tvFullScreenPreviewTitle.typeface = android.graphics.Typeface.MONOSPACE
-            previewBinding.tvFullScreenPreviewMetadata.typeface = android.graphics.Typeface.MONOSPACE
-            previewBinding.tvFullScreenPreviewTitle.letterSpacing = 0.06f
-        }
-        previewBinding.ivFullScreenTemplateMap.imageTintList = ColorStateList.valueOf(
+        eyebrow.setTextColor(
             when (visual) {
-                TemplateVisual.CLASSIC -> Color.WHITE
                 TemplateVisual.TRAVEL -> Color.rgb(255, 184, 92)
-                TemplateVisual.CLEAN -> Color.rgb(30, 41, 59)
                 TemplateVisual.EVIDENCE -> Color.rgb(255, 193, 7)
+                else -> Color.rgb(194, 222, 255)
             }
         )
+        eyebrow.letterSpacing = if (visual == TemplateVisual.EVIDENCE) 0.16f else 0.1f
+        when (visual) {
+            TemplateVisual.CLASSIC -> previewBinding.tvFullScreenPreviewTitle.typeface = Typeface.DEFAULT_BOLD
+            TemplateVisual.TRAVEL -> {
+                previewBinding.tvFullScreenPreviewTitle.typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD)
+                previewBinding.tvFullScreenPreviewTitle.textSize = 20f
+                previewBinding.tvFullScreenPreviewMetadata.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+            }
+            TemplateVisual.CLEAN -> {
+                previewBinding.fullScreenPreviewTextGroup.gravity = Gravity.CENTER_HORIZONTAL
+                previewBinding.tvFullScreenPreviewTitle.gravity = Gravity.CENTER
+                previewBinding.tvFullScreenPreviewMetadata.gravity = Gravity.CENTER
+                previewBinding.tvFullScreenPreviewTitle.textSize = 20f
+            }
+            TemplateVisual.EVIDENCE -> {
+                previewBinding.tvFullScreenPreviewTitle.typeface = Typeface.MONOSPACE
+                previewBinding.tvFullScreenPreviewMetadata.typeface = Typeface.MONOSPACE
+                previewBinding.tvFullScreenPreviewTitle.letterSpacing = 0.06f
+            }
+        }
+        val accent = when (visual) {
+            TemplateVisual.CLASSIC -> Color.WHITE
+            TemplateVisual.TRAVEL -> Color.rgb(255, 184, 92)
+            TemplateVisual.CLEAN -> Color.rgb(30, 41, 59)
+            TemplateVisual.EVIDENCE -> Color.rgb(255, 193, 7)
+        }
+        previewBinding.ivFullScreenTemplateMap.imageTintList = ColorStateList.valueOf(accent)
+        previewBinding.ivFullScreenTemplateMap.setBackgroundResource(
+            when (visual) {
+                TemplateVisual.CLASSIC -> R.drawable.bg_template_map_classic
+                TemplateVisual.TRAVEL -> R.drawable.bg_template_map_travel
+                TemplateVisual.CLEAN -> R.drawable.bg_template_map
+                TemplateVisual.EVIDENCE -> R.drawable.bg_template_map_evidence
+            }
+        )
+        if (visual == TemplateVisual.CLASSIC) {
+            overlay.removeView(previewBinding.ivFullScreenTemplateMap)
+            overlay.addView(previewBinding.ivFullScreenTemplateMap, 0)
+        }
+        (previewBinding.ivFullScreenTemplateMap.layoutParams as LinearLayout.LayoutParams).apply {
+            width = ((if (visual == TemplateVisual.TRAVEL) 104 else 88) * density).toInt()
+            height = ((if (visual == TemplateVisual.TRAVEL) 76 else 66) * density).toInt()
+            marginStart = if (visual == TemplateVisual.CLASSIC) 0 else (14 * density).toInt()
+            marginEnd = if (visual == TemplateVisual.CLASSIC) (16 * density).toInt() else 0
+        }
     }
 
     private fun applyTemplate(style: ImageStyle, chipId: Int, @StringRes label: Int) {
@@ -966,6 +1117,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         if (tagPhotoDialog?.isShowing == true) return
         pendingTagPhoto = TagPhotoRequest(sourceUri)
         tagPhotoLocation = null
+        tagLocationRequestVersion++
         tagPhotoPreviewBitmap = null
 
         val reviewBinding = DialogTagPhotoReviewBinding.inflate(layoutInflater)
@@ -1052,13 +1204,12 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
 
         tagPhotoDialog = MaterialAlertDialogBuilder(this)
             .setView(reviewBinding.root)
-            .setPositiveButton(R.string.tag_photo_save_tagged_copy) { _, _ ->
-                val place = reviewBinding.etTagPhotoPlace.text?.toString()?.trim().orEmpty()
-                val address = reviewBinding.etTagPhotoAddress.text?.toString()?.trim().orEmpty()
-                saveTaggedCopy(sourceUri, place, address, reviewBinding)
-            }
+            // Install the click listener after show so Android does not auto-dismiss
+            // the dialog while the asynchronous image processing is still running.
+            .setPositiveButton(R.string.tag_photo_save_tagged_copy, null)
             .setNegativeButton(R.string.cancel, null)
             .setOnDismissListener {
+                tagLocationRequestVersion++
                 pendingTagPhoto = null
                 tagPhotoLocation = null
                 tagPhotoDialog = null
@@ -1068,15 +1219,25 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             }
             .create()
             .apply {
-                setOnShowListener { setSaveButtonEnabled(false) }
+                setOnShowListener {
+                    setSaveButtonEnabled(false)
+                    getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                        val place = reviewBinding.etTagPhotoPlace.text?.toString()?.trim().orEmpty()
+                        val address = reviewBinding.etTagPhotoAddress.text?.toString()?.trim().orEmpty()
+                        saveTaggedCopy(sourceUri, place, address, reviewBinding)
+                    }
+                }
                 show()
             }
     }
 
     private fun prefillTagPhotoWithCurrentLocation(reviewBinding: DialogTagPhotoReviewBinding) {
+        val requestVersion = ++tagLocationRequestVersion
         reviewBinding.tvTagPhotoLocation.setText(R.string.current_location_loading)
         gti.fetchCurrentLocationDetails { details ->
-            if (isFinishing || isDestroyed || tagPhotoDialog?.isShowing != true) return@fetchCurrentLocationDetails
+            if (isFinishing || isDestroyed || tagPhotoDialog?.isShowing != true ||
+                requestVersion != tagLocationRequestVersion
+            ) return@fetchCurrentLocationDetails
             if (details == null) {
                 reviewBinding.tvTagPhotoLocation.setText(R.string.current_location_unavailable)
                 return@fetchCurrentLocationDetails
@@ -1102,6 +1263,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     }
 
     private fun onTagPhotoLocationPicked(latitude: Double, longitude: Double) {
+        tagLocationRequestVersion++
         val current = tagPhotoLocation
         val startingPlace = current?.place.orEmpty()
         val startingAddress = current?.address.orEmpty()
@@ -1127,6 +1289,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     }
 
     private fun resolveTagPhotoAddress(latitude: Double, longitude: Double) {
+        val requestVersion = ++tagLocationRequestVersion
         backgroundExecutor.execute {
             val result = runCatching {
                 @Suppress("DEPRECATION")
@@ -1136,7 +1299,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             }.getOrNull()
             runOnUiThread {
                 if (result == null || isFinishing || isDestroyed ||
-                    tagPhotoDialog?.isShowing != true
+                    tagPhotoDialog?.isShowing != true || requestVersion != tagLocationRequestVersion
                 ) return@runOnUiThread
                 val place = result.locality ?: result.subAdminArea ?: result.adminArea.orEmpty()
                 val addressLine = result.getAddressLine(0).orEmpty()
@@ -1297,18 +1460,35 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
 
     private fun previewCapturedImage() {
         val uri = gtiUri ?: return
+        val requestVersion = ++previewRequestVersion
         binding.progressBar.visibility = View.VISIBLE
         backgroundExecutor.execute {
             historyRepository.recordCapture(uri)
             val bitmap = decodePreview(uri)
             val size = getUriFileSize(uri)
             runOnUiThread {
-                if (gtiUri != uri || isFinishing || isDestroyed) return@runOnUiThread
+                if (gtiUri != uri || requestVersion != previewRequestVersion ||
+                    isFinishing || isDestroyed
+                ) {
+                    bitmap?.recycle()
+                    return@runOnUiThread
+                }
                 binding.progressBar.visibility = View.GONE
                 if (bitmap == null) {
+                    capturedPreviewBitmap?.recycle()
+                    capturedPreviewBitmap = null
+                    binding.ivImage.setImageDrawable(null)
+                    binding.ivImage.visibility = View.GONE
+                    binding.ivClose.visibility = View.GONE
+                    binding.tvPhotoInsight.visibility = View.GONE
+                    binding.cardResult.visibility = View.GONE
+                    binding.emptyState.visibility = View.VISIBLE
+                    gtiUri = null
                     showMessage("The photo was saved, but its preview could not be loaded")
                     return@runOnUiThread
                 }
+                capturedPreviewBitmap?.recycle()
+                capturedPreviewBitmap = bitmap
                 binding.ivImage.setImageBitmap(bitmap)
                 binding.ivImage.visibility = View.VISIBLE
                 binding.emptyState.visibility = View.GONE
@@ -1385,7 +1565,13 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     }
 
     override fun onDestroy() {
+        previewRequestVersion++
+        tagLocationRequestVersion++
         locationGateDialog?.dismiss()
+        tagPhotoDialog?.dismiss()
+        binding.ivImage.setImageDrawable(null)
+        capturedPreviewBitmap?.recycle()
+        capturedPreviewBitmap = null
         if (::recentAdapter.isInitialized) recentAdapter.release()
         if (::savedAdapter.isInitialized) savedAdapter.release()
         backgroundExecutor.shutdownNow()

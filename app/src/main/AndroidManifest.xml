@@ -11,12 +11,10 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:largeHeap="true"
-        android:requestLegacyExternalStorage="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:testOnly="false"
         android:theme="@style/Theme.GeoTagPhoto"
-        android:usesCleartextTraffic="true"
         tools:ignore="AllowBackup"
         tools:targetApi="tiramisu">
         <activity

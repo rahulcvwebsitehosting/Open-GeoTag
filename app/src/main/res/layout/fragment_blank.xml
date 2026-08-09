@@ -37,7 +37,6 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="10dp"
-        android:layout_weight="1"
         android:orientation="horizontal"
         android:visibility="visible"
         app:layout_constraintEnd_toEndOf="parent"
@@ -52,8 +51,8 @@
             android:layout_weight="1"
             android:fontFamily="monospace"
             android:gravity="center"
-            android:text="G\nT\nI"
-            android:textSize="44dp"
+            android:text="@string/legacy_gti_stack"
+            android:textSize="44sp"
             android:textStyle="bold"
 
             />
@@ -78,6 +77,7 @@
                     android:id="@+id/ivImage"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
+                    android:contentDescription="@string/captured_photo_preview"
                     android:scaleType="fitXY"
                     android:visibility="visible" />
 
@@ -94,6 +94,7 @@
                         android:layout_width="100dp"
                         android:layout_height="100dp"
                         android:layout_marginEnd="5dp"
+                        android:contentDescription="@string/open_smart_camera"
                         android:scaleType="fitXY"
                         android:src="@drawable/ic_outline_camera_alt_24"
                         android:visibility="visible" />
@@ -109,11 +110,13 @@
 
                 <androidx.appcompat.widget.AppCompatImageView
                     android:id="@+id/ivClose"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
                     android:layout_alignParentTop="true"
                     android:layout_alignParentEnd="true"
                     android:background="@color/white"
+                    android:contentDescription="@string/clear_photo_preview"
+                    android:padding="14dp"
                     android:scaleType="fitXY"
                     android:src="@drawable/ic_close"
                     android:visibility="gone"
@@ -130,8 +133,8 @@
             android:layout_weight="1"
             android:fontFamily="monospace"
             android:gravity="center"
-            android:text="G\nT\nI"
-            android:textSize="44dp"
+            android:text="@string/legacy_gti_stack"
+            android:textSize="44sp"
             android:textStyle="bold"
 
             />
@@ -168,7 +171,7 @@
                         style="@style/Widget.Material3.Button.OutlinedButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="CameraX Api"
+                        android:text="@string/legacy_camerax_api"
                         android:textSize="12sp" />
 
                     <com.google.android.material.button.MaterialButton
@@ -176,7 +179,7 @@
                         style="@style/Widget.Material3.Button.OutlinedButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="System Camera"
+                        android:text="@string/legacy_system_camera"
                         android:textSize="12sp" />
                 </com.google.android.material.button.MaterialButtonToggleGroup>
             </LinearLayout>
@@ -206,7 +209,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_margin="3dp"
-                            android:text="GTI Image Path : "
+                            android:text="@string/legacy_image_path"
                             android:textStyle="bold" />
 
                         <androidx.appcompat.widget.AppCompatTextView
@@ -234,7 +237,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_margin="3dp"
-                            android:text="GTI Image Size : "
+                            android:text="@string/legacy_image_size"
                             android:textStyle="bold" />
 
                         <androidx.appcompat.widget.AppCompatTextView
@@ -264,7 +267,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_margin="3dp"
-                            android:text="Enable GTI Features : "
+                            android:text="@string/legacy_enable_features"
                             android:textStyle="bold" />
 
                         <com.google.android.material.materialswitch.MaterialSwitch
@@ -300,7 +303,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_margin="3dp"
-                                android:text="Show author name : "
+                                android:text="@string/legacy_show_author"
                                 android:textStyle="bold" />
 
                             <com.google.android.material.materialswitch.MaterialSwitch
@@ -317,7 +320,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_margin="2dp"
-                            android:hint="Enter author name"
+                            android:hint="@string/legacy_enter_author"
                             android:visibility="gone" />
                     </LinearLayout>
 
@@ -346,7 +349,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_margin="3dp"
-                                android:text="Show app name : "
+                                android:text="@string/legacy_show_app"
                                 android:textStyle="bold" />
 
                             <com.google.android.material.materialswitch.MaterialSwitch
@@ -363,7 +366,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_margin="2dp"
-                            android:hint="Enter app name (custom)"
+                            android:hint="@string/legacy_enter_app"
                             android:visibility="gone" />
 
                     </LinearLayout>
@@ -389,7 +392,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_margin="3dp"
-                            android:text="Show lat long : "
+                            android:text="@string/legacy_show_coordinates"
                             android:textStyle="bold" />
 
                         <com.google.android.material.materialswitch.MaterialSwitch
@@ -421,7 +424,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_margin="3dp"
-                            android:text="Show date : "
+                            android:text="@string/legacy_show_date"
                             android:textStyle="bold" />
 
                         <com.google.android.material.materialswitch.MaterialSwitch
@@ -453,7 +456,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_margin="3dp"
-                            android:text="Show google map : "
+                            android:text="@string/legacy_show_map"
                             android:textStyle="bold" />
 
                         <com.google.android.material.materialswitch.MaterialSwitch
@@ -484,7 +487,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_margin="3dp"
-                            android:text="Set Image Extension : "
+                            android:text="@string/legacy_set_extension"
                             android:textStyle="bold" />
 
                         <com.google.android.material.button.MaterialButtonToggleGroup
@@ -501,7 +504,7 @@
                                 style="@style/Widget.Material3.Button.OutlinedButton"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="PNG"
+                                android:text="@string/image_format_png"
                                 android:textSize="12sp" />
 
                             <com.google.android.material.button.MaterialButton
@@ -509,7 +512,7 @@
                                 style="@style/Widget.Material3.Button.OutlinedButton"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="JPEG"
+                                android:text="@string/image_format_jpeg"
                                 android:textSize="12sp" />
                         </com.google.android.material.button.MaterialButtonToggleGroup>
 
@@ -524,7 +527,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_margin="10dp"
-                android:text="View On Github"
+                android:text="@string/legacy_view_github"
                 android:textAllCaps="false"
                 android:visibility="gone"
                 app:layout_constraintBottom_toBottomOf="parent"

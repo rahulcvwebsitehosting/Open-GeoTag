@@ -299,7 +299,7 @@ class GeoTagImage(
 
             binding.zoomSeekBar.max = 90
             binding.zoomSeekBar.progress = 0
-            binding.zoomValue.text = "1.0x"
+            binding.zoomValue.setText(R.string.gti_zoom_default)
 
             binding.previewView.scaleType = PreviewView.ScaleType.FILL_CENTER
             updateSmartCameraUi()
@@ -357,7 +357,10 @@ class GeoTagImage(
 
             binding.btnCapture.setOnClickListener {
                 it.isEnabled = false
-                binding.tvSmartHint.text = "Getting location and preparing photo…"
+                binding.btnClose.isEnabled = false
+                binding.btnFlip.isEnabled = false
+                binding.ivFlash.isEnabled = false
+                binding.tvSmartHint.setText(R.string.gti_preparing_photo)
                 capturedAspectRatio = resolveCameraAspectRatio()
                 capturedLevelAngle = currentLevelAngle
                 if (mediaPlayer == null) mediaPlayer =
@@ -624,6 +627,7 @@ class GeoTagImage(
     private fun capturePhotoWithCameraX(onImageCaptured: (Uri?) -> Unit) {
         val imageCapture = imageCapture ?: run {
             onImageCaptured(null)
+            closeCameraDialog()
             return
         }
 
@@ -632,7 +636,10 @@ class GeoTagImage(
             // Create output file
             val photoFile = createImageInternally()
             if (photoFile == null) {
-                onImageCaptured(null)
+                ContextCompat.getMainExecutor(context).execute {
+                    onImageCaptured(null)
+                    closeCameraDialog()
+                }
                 return@fetchCurrentLocation
             }
 
@@ -705,11 +712,16 @@ class GeoTagImage(
 
         if (checkCameraPermissions()) {
             fetchCurrentLocation {
-                fileUri = createImageInternally()?.let {
+                val preparedUri = createImageInternally()?.let {
                     FileProvider.getUriForFile(context, "${context.packageName}.provider", it)
                 }
-                cameraLauncher?.launch(fileUri!!)
-                onReady(fileUri)
+                if (preparedUri == null) {
+                    onReady(null)
+                    return@fetchCurrentLocation
+                }
+                fileUri = preparedUri
+                cameraLauncher?.launch(preparedUri)
+                onReady(preparedUri)
             }
         } else {
             onReady(null)
@@ -794,7 +806,10 @@ class GeoTagImage(
 
         executorService.execute {
             try {
-                mapBitmap = loadImageFromUrl(imageUrl)
+                val loadedMap = loadImageFromUrl(imageUrl)
+                val previousMap = mapBitmap
+                mapBitmap = loadedMap
+                if (previousMap != loadedMap) previousMap?.recycle()
             } catch (e: Exception) {
                 Log.e(TAG, "Static map loading failed", e)
             }
@@ -874,7 +889,7 @@ class GeoTagImage(
         currentPhotoPath?.let { filePath ->
             val file = File(filePath)
 
-            var bitmap = decodeSampledBitmap(filePath, 1280, 1280)
+            var bitmap = decodeSampledBitmap(filePath, 1280, 1280) ?: return null
 
             val rotatedBitmap = setOrientation(filePath, bitmap)
             if (rotatedBitmap != bitmap) {
@@ -901,7 +916,11 @@ class GeoTagImage(
                     bitmap = scaled
                 }
             } else {
-                bitmap = scaleToMaxSide(bitmap)
+                val scaled = scaleToMaxSide(bitmap)
+                if (scaled != bitmap) {
+                    bitmap.recycle()
+                    bitmap = scaled
+                }
             }
 
             if (geoTagged && saveOriginalPhoto) {
@@ -1352,18 +1371,33 @@ class GeoTagImage(
         val effectiveLatitude = customLatitude ?: latitude
         val effectiveLongitude = customLongitude ?: longitude
         val livePlace = listOf(city, country).filter(String::isNotBlank).joinToString(", ")
+        val resolvedPlace = customPlace ?: livePlace
         elementsList.addAll(
-            GTIMetadataFormatter.buildElements(
-                place = customPlace ?: livePlace,
-                address = customAddress ?: address,
-                latitude = effectiveLatitude,
-                longitude = effectiveLongitude,
-                showCoordinates = showLatLng,
-                dateText = formattedDate,
-                authorText = if (showAuthorName) "$label $authorName" else null,
-                appText = if (showAppName) "Captured via $exifAppName" else null
-            )
+            if (imageStyle == ImageStyle.SQUARE) {
+                buildList {
+                    resolvedPlace.takeIf(String::isNotBlank)?.let(::add)
+                    formattedDate?.takeIf(String::isNotBlank)?.let(::add)
+                    if (showAuthorName) add("$label $authorName")
+                    if (showAppName) add("Captured via $exifAppName")
+                }
+            } else {
+                GTIMetadataFormatter.buildElements(
+                    place = resolvedPlace,
+                    address = customAddress ?: address,
+                    latitude = effectiveLatitude,
+                    longitude = effectiveLongitude,
+                    showCoordinates = showLatLng,
+                    dateText = formattedDate,
+                    authorText = if (showAuthorName) "$label $authorName" else null,
+                    appText = if (showAppName) "Captured via $exifAppName" else null
+                )
+            }
         )
+        when (imageStyle) {
+            ImageStyle.LANDSCAPE -> elementsList.add(0, "TRAVEL LOG")
+            ImageStyle.FIELD_PROOF -> elementsList.add(0, "FIELD RECORD • GPS VERIFIED")
+            else -> Unit
+        }
 
         val result = bitmap.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(result)
@@ -1376,16 +1410,20 @@ class GeoTagImage(
             color = when (imageStyle) {
                 ImageStyle.SQUARE -> Color.rgb(20, 24, 31)
                 ImageStyle.LANDSCAPE -> Color.rgb(255, 244, 214)
+                ImageStyle.FIELD_PROOF -> Color.WHITE
                 else -> textColor
             }
             textSize = when (imageStyle) {
                 ImageStyle.LANDSCAPE -> customTextSize * 1.08f
+                ImageStyle.SQUARE -> customTextSize * 1.12f
                 ImageStyle.FIELD_PROOF -> customTextSize * 0.94f
                 else -> customTextSize
             }
             isAntiAlias = true
             typeface = when (imageStyle) {
-                ImageStyle.LANDSCAPE, ImageStyle.FIELD_PROOF -> Typeface.DEFAULT_BOLD
+                ImageStyle.LANDSCAPE -> Typeface.create(Typeface.SERIF, Typeface.BOLD)
+                ImageStyle.SQUARE -> Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                ImageStyle.FIELD_PROOF -> Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
                 else -> this@GeoTagImage.typeface
             }
             if (imageStyle != ImageStyle.SQUARE) setShadowLayer(1f, 0f, 1f, Color.BLACK)
@@ -1396,7 +1434,11 @@ class GeoTagImage(
                 ImageStyle.LANDSCAPE -> Color.argb(220, 55, 35, 18)
                 ImageStyle.SQUARE -> Color.argb(235, 255, 255, 255)
                 ImageStyle.FIELD_PROOF -> Color.argb(240, 8, 25, 42)
-                else -> backgroundColor
+                else -> if (backgroundColor == Color.TRANSPARENT) {
+                    Color.argb(220, 9, 20, 31)
+                } else {
+                    backgroundColor
+                }
             }
         }
 
@@ -1413,8 +1455,10 @@ class GeoTagImage(
         val edge = 20f
         val gap = 16f
         val maxTextWidth = when (imageStyle) {
-            ImageStyle.SQUARE -> result.width - 96
-            else -> result.width - effectiveMapWidth - 80
+            ImageStyle.SQUARE -> result.width - 112
+            ImageStyle.LANDSCAPE -> result.width - effectiveMapWidth - 112
+            ImageStyle.FIELD_PROOF -> result.width - effectiveMapWidth - 104
+            else -> result.width - effectiveMapWidth - 92
         }.coerceAtLeast(220)
         fun wrapText(line: String, paint: Paint, maxWidth: Int): List<String> {
             val words = line.split(" ")
@@ -1426,7 +1470,7 @@ class GeoTagImage(
                 if (paint.measureText(testLine) <= maxWidth) {
                     currentLine = testLine
                 } else {
-                    lines.add(currentLine)
+                    if (currentLine.isNotEmpty()) lines.add(currentLine)
                     currentLine = word
                 }
             }
@@ -1449,6 +1493,9 @@ class GeoTagImage(
         val top: Float
         val right: Float
         val bottom: Float
+        val textX: Float
+        var resolvedMapLeft = 0f
+        var resolvedMapTop = 0f
 
         when (imageStyle) {
             ImageStyle.LANDSCAPE -> {
@@ -1456,52 +1503,89 @@ class GeoTagImage(
                 top = edge
                 right = result.width - effectiveMapWidth - edge - if (effectiveMapWidth > 0) gap else 0f
                 bottom = top + blockHeight
+                textX = left + padding + 8f
+                resolvedMapLeft = result.width - effectiveMapWidth - edge
+                resolvedMapTop = edge
             }
             ImageStyle.SQUARE -> {
-                left = 28f
-                right = result.width - 28f
-                bottom = result.height - 28f
+                left = result.width * 0.07f
+                right = result.width * 0.93f
+                bottom = result.height - result.width * 0.07f
                 top = bottom - blockHeight
+                textX = left + padding
             }
             ImageStyle.FIELD_PROOF -> {
-                left = edge
-                right = result.width - effectiveMapWidth - edge - if (effectiveMapWidth > 0) gap else 0f
-                bottom = result.height - edge
-                top = bottom - blockHeight
+                val bandHeight = max(blockHeight, if (effectiveMapWidth > 0) mapHeight + padding * 2 else 0f)
+                left = 0f
+                right = result.width.toFloat()
+                bottom = result.height.toFloat()
+                top = bottom - bandHeight
+                textX = padding
+                resolvedMapLeft = result.width - effectiveMapWidth - edge
+                resolvedMapTop = top + (bandHeight - mapHeight) / 2f
             }
             else -> {
-                left = effectiveMapWidth + edge + if (effectiveMapWidth > 0) gap else 0f
-                right = result.width - edge
-                bottom = result.height - edge
-                top = bottom - blockHeight
+                val bandHeight = max(blockHeight, if (effectiveMapWidth > 0) mapHeight + padding * 2 else 0f)
+                left = 0f
+                right = result.width.toFloat()
+                bottom = result.height.toFloat()
+                top = bottom - bandHeight
+                textX = padding + if (effectiveMapWidth > 0) effectiveMapWidth + gap + edge else 0f
+                resolvedMapLeft = edge
+                resolvedMapTop = top + (bandHeight - mapHeight) / 2f
             }
         }
 
-        val cornerRadius = if (imageStyle == ImageStyle.FIELD_PROOF) 4f else 18f
+        val cornerRadius = when (imageStyle) {
+            ImageStyle.LANDSCAPE -> 26f
+            ImageStyle.SQUARE -> 32f
+            ImageStyle.FIELD_PROOF, ImageStyle.SMART_AUTO, ImageStyle.PORTRAIT -> 0f
+        }
         canvas.drawRoundRect(RectF(left, top, right, bottom), cornerRadius, cornerRadius, bgPaint)
 
-        if (imageStyle == ImageStyle.FIELD_PROOF) {
-            Paint().apply { color = Color.rgb(255, 193, 7); strokeWidth = 8f }.also {
-                canvas.drawLine(left, top, right, top, it)
-            }
+        when (imageStyle) {
+            ImageStyle.LANDSCAPE -> Paint().apply {
+                color = Color.rgb(255, 184, 92)
+                strokeWidth = 8f
+                strokeCap = Paint.Cap.ROUND
+            }.also { canvas.drawLine(left + 12f, top + 18f, left + 12f, bottom - 18f, it) }
+            ImageStyle.FIELD_PROOF -> Paint().apply {
+                color = Color.rgb(255, 193, 7)
+                strokeWidth = 8f
+            }.also { canvas.drawLine(left, top, right, top, it) }
+            else -> Unit
         }
 
         mapBitmap?.let {
             if (effectiveMapWidth > 0 && mapHeight > 0) {
                 val scaledMap = it.scale(effectiveMapWidth, mapHeight, false)
-                val mapLeft = if (imageStyle == ImageStyle.LANDSCAPE || imageStyle == ImageStyle.FIELD_PROOF) {
-                    result.width - effectiveMapWidth - edge
-                } else {
-                    edge
+                val frameWidth = if (imageStyle == ImageStyle.FIELD_PROOF) 3f else 4f
+                val frameColor = when (imageStyle) {
+                    ImageStyle.LANDSCAPE -> Color.rgb(255, 184, 92)
+                    ImageStyle.FIELD_PROOF -> Color.rgb(255, 193, 7)
+                    else -> Color.WHITE
                 }
-                val mapTop = if (imageStyle == ImageStyle.LANDSCAPE) edge else result.height - mapHeight - edge
-                canvas.drawBitmap(scaledMap, mapLeft, mapTop, design)
+                Paint().apply { color = frameColor; isAntiAlias = true }.also { framePaint ->
+                    val frameRadius = if (imageStyle == ImageStyle.LANDSCAPE) 16f else 3f
+                    canvas.drawRoundRect(
+                        RectF(
+                            resolvedMapLeft - frameWidth,
+                            resolvedMapTop - frameWidth,
+                            resolvedMapLeft + effectiveMapWidth + frameWidth,
+                            resolvedMapTop + mapHeight + frameWidth
+                        ),
+                        frameRadius,
+                        frameRadius,
+                        framePaint
+                    )
+                }
+                canvas.drawBitmap(scaledMap, resolvedMapLeft, resolvedMapTop, design)
             }
         }
 
         var y = top + padding - textPaint.fontMetrics.top
         allWrappedLines.forEach { line ->
-            canvas.drawText(line, left + padding, y, textPaint)
+            canvas.drawText(line, textX, y, textPaint)
             y += textHeight + lineSpacing
         }
 
@@ -1941,8 +2025,14 @@ class GeoTagImage(
      * Set Directory Name
      */
     fun setDirectory(directoryName: String) {
-        this.directoryName = directoryName
-        this.directoryName?.replaceFirstChar {
+        val sanitized = directoryName
+            .trim()
+            .replace(Regex("[\\\\/:*?\"<>|]+"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim('.', ' ')
+            .take(80)
+            .ifBlank { "Camera" }
+        this.directoryName = sanitized.replaceFirstChar {
             if (it.isLowerCase()) it.titlecase() else it.toString()
         }
     }
