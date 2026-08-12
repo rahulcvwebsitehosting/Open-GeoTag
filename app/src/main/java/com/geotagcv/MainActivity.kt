@@ -18,6 +18,7 @@ import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.graphics.Typeface
 import android.location.Geocoder
+import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -25,6 +26,7 @@ import android.provider.MediaStore
 import android.provider.Settings
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
+import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -47,6 +49,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.dangiashish.GeoTagImage
 import com.dangiashish.GeoTagImage.ImageStyle
 import com.dangiashish.GeoTagImage.MapViewType
@@ -93,11 +96,34 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     private var tagPhotoCameraSnapshot: CustomMetadataSnapshot? = null
     private val preferences by lazy { getSharedPreferences(PREFERENCES_NAME, MODE_PRIVATE) }
     private var locationPermissionRequestInFlight = false
+    private var locationPermissionRequestedThisSession = false
     private var locationGateDialog: AlertDialog? = null
+    private var locationServicesDialog: AlertDialog? = null
     private var customLocationRequestVersion = 0
     private var tagLocationRequestVersion = 0
+    private var selectedImageStyle = ImageStyle.SMART_AUTO
+    private var fullPhotoPreviewDialog: Dialog? = null
+    private var fullPhotoPreviewBitmap: Bitmap? = null
+    private var pendingCameraLaunch = false
+    private var updatingStyleSelection = false
+    private var recentHistoryLoadInFlight = false
+    private var recentHistoryReloadPending = false
+    private var savedHistoryLoadInFlight = false
+    private var savedHistoryReloadPending = false
+    private lateinit var templateAdapter: TemplateAdapter
 
-    private enum class TemplateVisual { CLASSIC, TRAVEL, CLEAN, EVIDENCE }
+    private enum class TemplateVisual { CLASSIC, TRAVEL, PORTRAIT, CLEAN, GPS_COMPACT, POSTCARD, EVIDENCE }
+
+    private data class TemplateOption(
+        val style: ImageStyle,
+        @param:DrawableRes val image: Int,
+        @param:StringRes val name: Int,
+        @param:StringRes val description: Int,
+        @param:StringRes val previewTitle: Int,
+        @param:StringRes val previewMetadata: Int,
+        val visual: TemplateVisual,
+        val showMapPreview: Boolean
+    )
 
     private data class TagPhotoRequest(val sourceUri: Uri)
 
@@ -134,12 +160,18 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         ) { permissions ->
             locationPermissionRequestInFlight = false
             val cameraGranted = permissions[Manifest.permission.CAMERA] == true
+            val cameraWasRequested = permissions.containsKey(Manifest.permission.CAMERA)
             if (hasLocationPermission()) {
-                unlockAppForLocation()
-                if (permissions.containsKey(Manifest.permission.CAMERA) && !cameraGranted) {
+                ensureLocationAccess()
+                if (cameraWasRequested && !cameraGranted) {
+                    pendingCameraLaunch = false
                     showMessage(getString(R.string.camera_permission_required))
                 } else {
                     onPermissionGranted()
+                    if (cameraWasRequested && pendingCameraLaunch) {
+                        pendingCameraLaunch = false
+                        binding.btnCapture.post { openSmartCamera() }
+                    }
                 }
             } else {
                 lockAppForLocation()
@@ -207,7 +239,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         setupPhotoHistory()
         setupTagSavedPhoto()
         setupBottomNavigation()
-        applyStyle(ImageStyle.SMART_AUTO)
+        restoreSelectedStyle()
         ensureLocationAccess()
     }
 
@@ -285,7 +317,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     override fun onResume() {
         super.onResume()
         if (::gti.isInitialized && !locationPermissionRequestInFlight) {
-            if (hasLocationPermission()) unlockAppForLocation() else lockAppForLocation()
+            ensureLocationAccess()
         }
     }
 
@@ -297,11 +329,16 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
 
     private fun ensureLocationAccess() {
         if (hasLocationPermission()) {
-            unlockAppForLocation()
+            if (isDeviceLocationEnabled()) {
+                unlockAppForLocation()
+                gti.prepareCaptureMetadata()
+            } else {
+                lockAppForLocationServices()
+            }
             return
         }
         binding.root.visibility = View.INVISIBLE
-        if (!preferences.getBoolean(PREF_LOCATION_REQUESTED, false)) {
+        if (!locationPermissionRequestedThisSession) {
             requestLocationPermission()
         } else {
             showLocationRequiredDialog()
@@ -311,7 +348,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     private fun requestLocationPermission() {
         locationGateDialog?.dismiss()
         locationPermissionRequestInFlight = true
-        preferences.edit { putBoolean(PREF_LOCATION_REQUESTED, true) }
+        locationPermissionRequestedThisSession = true
         permissionLauncher.launch(
             arrayOf(
                 Manifest.permission.ACCESS_FINE_LOCATION,
@@ -323,12 +360,39 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     private fun unlockAppForLocation() {
         locationGateDialog?.dismiss()
         locationGateDialog = null
+        locationServicesDialog?.dismiss()
+        locationServicesDialog = null
         binding.root.visibility = View.VISIBLE
     }
 
     private fun lockAppForLocation() {
         binding.root.visibility = View.INVISIBLE
         showLocationRequiredDialog()
+    }
+
+    private fun isDeviceLocationEnabled(): Boolean {
+        val manager = getSystemService(LOCATION_SERVICE) as LocationManager
+        return manager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+            manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+    }
+
+    private fun lockAppForLocationServices() {
+        binding.root.visibility = View.INVISIBLE
+        showLocationServicesRequiredDialog()
+    }
+
+    private fun showLocationServicesRequiredDialog() {
+        if (isFinishing || isDestroyed || locationServicesDialog?.isShowing == true) return
+        locationServicesDialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.location_services_required_title)
+            .setMessage(R.string.location_services_required_message)
+            .setCancelable(false)
+            .setNegativeButton(R.string.exit_app) { _, _ -> finishAffinity() }
+            .setPositiveButton(R.string.turn_on_location) { _, _ ->
+                startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+            }
+            .create()
+            .also { it.show() }
     }
 
     private fun showLocationRequiredDialog() {
@@ -359,25 +423,23 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
 
     private fun setupCaptureActions() {
         binding.btnCapture.setOnClickListener { view ->
+            if (!hasLocationPermission()) {
+                lockAppForLocation()
+                return@setOnClickListener
+            }
+            if (!isDeviceLocationEnabled()) {
+                lockAppForLocationServices()
+                return@setOnClickListener
+            }
             view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
-            binding.progressBar.visibility = View.VISIBLE
-            gti.launchCamera(
-                onImageCaptured = { uri ->
-                    binding.progressBar.visibility = View.GONE
-                    if (uri == null) {
-                        showMessage("Could not capture the photo. Please try again.")
-                    } else {
-                        gtiUri = uri
-                        previewCapturedImage()
-                    }
-                },
-                onFailure = { message ->
-                    binding.progressBar.visibility = View.GONE
-                    showMessage(message ?: "Camera is unavailable")
-                }
-            )
-            // The camera is modal; its capture control owns the processing state.
-            binding.progressBar.visibility = View.GONE
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                pendingCameraLaunch = true
+                permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA))
+                return@setOnClickListener
+            }
+            openSmartCamera()
         }
 
         binding.ivClose.setOnClickListener {
@@ -389,14 +451,65 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             binding.ivClose.visibility = View.GONE
             binding.tvPhotoInsight.visibility = View.GONE
             binding.cardResult.visibility = View.GONE
+            binding.cardLatestThumbnail.visibility = View.GONE
+            binding.ivLatestThumbnail.setImageDrawable(null)
             binding.emptyState.visibility = View.VISIBLE
             binding.progressBar.visibility = View.GONE
             gtiUri = null
         }
+        binding.ivImage.setOnClickListener { showCapturedPhotoFullScreen() }
+        binding.cardLatestThumbnail.setOnClickListener { showCapturedPhotoFullScreen() }
+    }
+
+    private fun openSmartCamera() {
+        if (!hasLocationPermission()) {
+            lockAppForLocation()
+            return
+        }
+        if (!isDeviceLocationEnabled()) {
+            lockAppForLocationServices()
+            return
+        }
+        applySelectedStyleForCapture()
+        binding.progressBar.visibility = View.VISIBLE
+        gti.launchCamera(
+            onImageCaptured = { uri ->
+                binding.progressBar.visibility = View.GONE
+                if (uri == null) {
+                    showMessage("Could not capture the photo. Please try again.")
+                } else {
+                    gtiUri = uri
+                    previewCapturedImage()
+                }
+            },
+            onFailure = { message ->
+                binding.progressBar.visibility = View.GONE
+                showMessage(message ?: "Camera is unavailable")
+            }
+        )
+        // The camera is modal; its capture control owns the processing state.
+        binding.progressBar.visibility = View.GONE
+    }
+
+    private fun applySelectedStyleForCapture() {
+        gti.setImageStyle(selectedImageStyle)
+        gti.showDate(binding.sDate.isChecked)
+        gti.showLatLng(binding.sLatLng.isChecked)
+        gti.showGoogleMap(binding.sMap.isChecked)
+        gti.enableAutoStraighten(binding.sStraighten.isChecked)
+        val mapStyle = when (binding.mapStyleChips.checkedChipId) {
+            R.id.chipHybrid -> MapViewType.HYBRID
+            R.id.chipTerrain -> MapViewType.TERRAIN
+            R.id.chipRoadmap -> MapViewType.ROADMAP
+            else -> MapViewType.SATELLITE
+        }
+        gti.setMapView(mapStyle)
+        gti.prepareCaptureMetadata()
     }
 
     private fun setupStyleRecommendations() {
         binding.smartCaptureSwitch.setOnCheckedChangeListener { _, checked ->
+            if (updatingStyleSelection) return@setOnCheckedChangeListener
             gti.enableSmartCapture(checked)
             binding.styleChips.isEnabled = checked
             for (index in 0 until binding.styleChips.childCount) {
@@ -412,15 +525,74 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         }
 
         binding.styleChips.setOnCheckedStateChangeListener { _, checkedIds ->
+            if (updatingStyleSelection) return@setOnCheckedStateChangeListener
             val checkedId = checkedIds.firstOrNull() ?: return@setOnCheckedStateChangeListener
-            if (binding.smartCaptureSwitch.isChecked) applyStyle(styleForChip(checkedId))
+            if (binding.smartCaptureSwitch.isChecked) {
+                val style = styleForChip(checkedId)
+                applyStyle(style)
+                saveSelectedStyle(style)
+                updateActiveTemplateLabel(style)
+                updateTemplateSelectionButtons(style)
+            }
         }
+    }
+
+    private fun restoreSelectedStyle() {
+        val style = runCatching {
+            ImageStyle.valueOf(
+                preferences.getString(PREF_SELECTED_STYLE, ImageStyle.SMART_AUTO.name)
+                    ?: ImageStyle.SMART_AUTO.name
+            )
+        }.getOrDefault(ImageStyle.SMART_AUTO)
+        selectedImageStyle = style
+        updatingStyleSelection = true
+        try {
+            binding.smartCaptureSwitch.isChecked = true
+            binding.styleChips.check(chipForStyle(style))
+        } finally {
+            updatingStyleSelection = false
+        }
+        applyStyle(style)
+        updateActiveTemplateLabel(style)
+        updateTemplateSelectionButtons(style)
+    }
+
+    private fun saveSelectedStyle(style: ImageStyle) {
+        selectedImageStyle = style
+        preferences.edit { putString(PREF_SELECTED_STYLE, style.name) }
+    }
+
+    private fun chipForStyle(style: ImageStyle): Int = when (style) {
+        ImageStyle.SMART_AUTO -> R.id.chipSmartAuto
+        ImageStyle.LANDSCAPE -> R.id.chipLandscape
+        ImageStyle.PORTRAIT -> R.id.chipPortrait
+        ImageStyle.SQUARE -> R.id.chipSquare
+        ImageStyle.GPS_COMPACT -> R.id.chipGpsCompact
+        ImageStyle.POSTCARD -> R.id.chipPostcard
+        ImageStyle.FIELD_PROOF -> R.id.chipFieldProof
+    }
+
+    private fun updateActiveTemplateLabel(style: ImageStyle) {
+        binding.tvActiveTemplate.setText(activeTemplateLabel(style))
+    }
+
+    @StringRes
+    private fun activeTemplateLabel(style: ImageStyle): Int = when (style) {
+        ImageStyle.SMART_AUTO -> R.string.template_active_classic
+        ImageStyle.LANDSCAPE -> R.string.template_active_travel
+        ImageStyle.PORTRAIT -> R.string.template_active_portrait
+        ImageStyle.SQUARE -> R.string.template_active_clean
+        ImageStyle.GPS_COMPACT -> R.string.template_active_gps_compact
+        ImageStyle.POSTCARD -> R.string.template_active_postcard
+        ImageStyle.FIELD_PROOF -> R.string.template_active_evidence
     }
 
     private fun styleForChip(chipId: Int): ImageStyle = when (chipId) {
         R.id.chipLandscape -> ImageStyle.LANDSCAPE
         R.id.chipPortrait -> ImageStyle.PORTRAIT
         R.id.chipSquare -> ImageStyle.SQUARE
+        R.id.chipGpsCompact -> ImageStyle.GPS_COMPACT
+        R.id.chipPostcard -> ImageStyle.POSTCARD
         R.id.chipFieldProof -> ImageStyle.FIELD_PROOF
         else -> ImageStyle.SMART_AUTO
     }
@@ -451,6 +623,16 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             ImageStyle.SQUARE -> {
                 binding.tvRecommendationTitle.setText(R.string.recommendation_square_title)
                 binding.tvRecommendationBody.setText(R.string.recommendation_square_body)
+                setDetailDefaults(date = true, coordinates = false, map = false)
+            }
+            ImageStyle.GPS_COMPACT -> {
+                binding.tvRecommendationTitle.setText(R.string.recommendation_gps_compact_title)
+                binding.tvRecommendationBody.setText(R.string.recommendation_gps_compact_body)
+                setDetailDefaults(date = true, coordinates = true, map = false)
+            }
+            ImageStyle.POSTCARD -> {
+                binding.tvRecommendationTitle.setText(R.string.recommendation_postcard_title)
+                binding.tvRecommendationBody.setText(R.string.recommendation_postcard_body)
                 setDetailDefaults(date = true, coordinates = false, map = false)
             }
             ImageStyle.FIELD_PROOF -> {
@@ -523,6 +705,7 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             if (checked) {
                 prefillCurrentMetadata()
             } else {
+                customLocationRequestVersion++
                 gti.clearCustomMetadata()
                 customDateTimeSelected = false
                 customDateTime.timeInMillis = System.currentTimeMillis()
@@ -630,11 +813,14 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
 
     private fun prefillCurrentLocation() {
         if (!binding.customMetadataSwitch.isChecked) return
+        val requestVersion = ++customLocationRequestVersion
         binding.tvCurrentLocation.setText(R.string.current_location_loading)
         binding.btnRefreshLocation.isEnabled = false
         binding.btnChooseLocation.isEnabled = false
         gti.fetchCurrentLocationDetails { details ->
-            if (isFinishing || isDestroyed) return@fetchCurrentLocationDetails
+            if (isFinishing || isDestroyed || !binding.customMetadataSwitch.isChecked ||
+                requestVersion != customLocationRequestVersion
+            ) return@fetchCurrentLocationDetails
             binding.btnRefreshLocation.isEnabled = true
             binding.btnChooseLocation.isEnabled = true
             if (details == null) {
@@ -716,54 +902,86 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
 
     private fun setupTemplates() {
         val previewPhoto = R.drawable.template_preview_cse_block
-
-        configureTemplatePreview(
-            templateBinding = binding.templateClassic,
-            image = previewPhoto,
-            name = R.string.template_classic,
-            description = R.string.template_classic_description,
-            previewTitle = R.string.template_preview_classic_title,
-            previewMetadata = R.string.template_preview_classic_metadata,
-            visual = TemplateVisual.CLASSIC,
-            showMapPreview = true
-        ) {
+        binding.btnDefaultTemplate.setOnClickListener {
             applyTemplate(ImageStyle.SMART_AUTO, R.id.chipSmartAuto, R.string.template_active_classic)
         }
-        configureTemplatePreview(
-            templateBinding = binding.templateTravel,
-            image = previewPhoto,
-            name = R.string.template_travel,
-            description = R.string.template_travel_description,
-            previewTitle = R.string.template_preview_travel_title,
-            previewMetadata = R.string.template_preview_travel_metadata,
-            visual = TemplateVisual.TRAVEL,
-            showMapPreview = true
-        ) {
-            applyTemplate(ImageStyle.LANDSCAPE, R.id.chipLandscape, R.string.template_active_travel)
+        val options = listOf(
+            TemplateOption(ImageStyle.SMART_AUTO, previewPhoto, R.string.template_classic, R.string.template_classic_description, R.string.template_preview_classic_title, R.string.template_preview_classic_metadata, TemplateVisual.CLASSIC, true),
+            TemplateOption(ImageStyle.LANDSCAPE, previewPhoto, R.string.template_travel, R.string.template_travel_description, R.string.template_preview_travel_title, R.string.template_preview_travel_metadata, TemplateVisual.TRAVEL, true),
+            TemplateOption(ImageStyle.PORTRAIT, previewPhoto, R.string.template_portrait, R.string.template_portrait_description, R.string.template_preview_portrait_title, R.string.template_preview_portrait_metadata, TemplateVisual.PORTRAIT, true),
+            TemplateOption(ImageStyle.SQUARE, previewPhoto, R.string.template_clean, R.string.template_clean_description, R.string.template_preview_clean_title, R.string.template_preview_clean_metadata, TemplateVisual.CLEAN, false),
+            TemplateOption(ImageStyle.GPS_COMPACT, previewPhoto, R.string.template_gps_compact, R.string.template_gps_compact_description, R.string.template_preview_gps_compact_title, R.string.template_preview_gps_compact_metadata, TemplateVisual.GPS_COMPACT, false),
+            TemplateOption(ImageStyle.POSTCARD, previewPhoto, R.string.template_postcard, R.string.template_postcard_description, R.string.template_preview_postcard_title, R.string.template_preview_postcard_metadata, TemplateVisual.POSTCARD, false),
+            TemplateOption(ImageStyle.FIELD_PROOF, previewPhoto, R.string.template_evidence, R.string.template_evidence_description, R.string.template_preview_evidence_title, R.string.template_preview_evidence_metadata, TemplateVisual.EVIDENCE, true)
+        )
+        templateAdapter = TemplateAdapter(options)
+        binding.templatesList.apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            adapter = templateAdapter
+            itemAnimator = null
+            setHasFixedSize(true)
         }
-        configureTemplatePreview(
-            templateBinding = binding.templateClean,
-            image = previewPhoto,
-            name = R.string.template_clean,
-            description = R.string.template_clean_description,
-            previewTitle = R.string.template_preview_clean_title,
-            previewMetadata = R.string.template_preview_clean_metadata,
-            visual = TemplateVisual.CLEAN,
-            showMapPreview = false
-        ) {
-            applyTemplate(ImageStyle.SQUARE, R.id.chipSquare, R.string.template_active_clean)
+    }
+
+    private inner class TemplateAdapter(
+        private val options: List<TemplateOption>
+    ) : RecyclerView.Adapter<TemplateAdapter.TemplateViewHolder>() {
+        var selectedStyle: ImageStyle = ImageStyle.SMART_AUTO
+            set(value) {
+                if (field == value) return
+                val oldIndex = options.indexOfFirst { it.style == field }
+                field = value
+                val newIndex = options.indexOfFirst { it.style == value }
+                if (oldIndex >= 0) notifyItemChanged(oldIndex)
+                if (newIndex >= 0) notifyItemChanged(newIndex)
+            }
+
+        override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): TemplateViewHolder {
+            val itemBinding = ItemTemplatePreviewBinding.inflate(
+                LayoutInflater.from(parent.context),
+                parent,
+                false
+            )
+            return TemplateViewHolder(itemBinding)
         }
-        configureTemplatePreview(
-            templateBinding = binding.templateEvidence,
-            image = previewPhoto,
-            name = R.string.template_evidence,
-            description = R.string.template_evidence_description,
-            previewTitle = R.string.template_preview_evidence_title,
-            previewMetadata = R.string.template_preview_evidence_metadata,
-            visual = TemplateVisual.EVIDENCE,
-            showMapPreview = true
-        ) {
-            applyTemplate(ImageStyle.FIELD_PROOF, R.id.chipFieldProof, R.string.template_active_evidence)
+
+        override fun onBindViewHolder(holder: TemplateViewHolder, position: Int) {
+            holder.bind(options[position])
+        }
+
+        override fun getItemCount(): Int = options.size
+
+        inner class TemplateViewHolder(
+            private val itemBinding: ItemTemplatePreviewBinding
+        ) : RecyclerView.ViewHolder(itemBinding.root) {
+            fun bind(option: TemplateOption) {
+                itemBinding.root.tag = option.style.name
+                configureTemplatePreview(
+                    templateBinding = itemBinding,
+                    image = option.image,
+                    name = option.name,
+                    description = option.description,
+                    previewTitle = option.previewTitle,
+                    previewMetadata = option.previewMetadata,
+                    visual = option.visual,
+                    showMapPreview = option.showMapPreview
+                ) {
+                    applyTemplate(
+                        option.style,
+                        chipForStyle(option.style),
+                        activeTemplateLabel(option.style)
+                    )
+                }
+                val selected = option.style == selectedStyle
+                itemBinding.btnUseTemplate.isEnabled = !selected
+                itemBinding.btnUseTemplate.setText(
+                    if (selected) R.string.template_selected else R.string.use_template
+                )
+                itemBinding.root.strokeWidth = resources.getDimensionPixelSize(
+                    if (selected) R.dimen.template_selected_stroke
+                    else R.dimen.template_default_stroke
+                )
+            }
         }
     }
 
@@ -800,6 +1018,16 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         templateBinding.btnUseTemplate.setOnClickListener { onSelected() }
     }
 
+    private fun updateTemplateSelectionButtons(style: ImageStyle) {
+        if (::templateAdapter.isInitialized) templateAdapter.selectedStyle = style
+        val defaultSelected = style == ImageStyle.SMART_AUTO
+        binding.btnDefaultTemplate.isEnabled = !defaultSelected
+        binding.btnDefaultTemplate.setText(
+            if (defaultSelected) R.string.default_template_active
+            else R.string.switch_to_default_template
+        )
+    }
+
     private fun styleTemplatePreview(
         templateBinding: ItemTemplatePreviewBinding,
         visual: TemplateVisual
@@ -807,18 +1035,33 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         val overlay = templateBinding.previewOverlay
         val params = overlay.layoutParams as FrameLayout.LayoutParams
         val density = resources.displayMetrics.density
+        templateBinding.previewTextGroup.gravity = Gravity.START
+        templateBinding.tvPreviewTitle.gravity = Gravity.START
+        templateBinding.tvPreviewMetadata.gravity = Gravity.START
+        templateBinding.tvPreviewTitle.letterSpacing = 0f
+        templateBinding.tvPreviewMetadata.typeface = Typeface.DEFAULT
+        val floating = visual in setOf(
+            TemplateVisual.TRAVEL,
+            TemplateVisual.PORTRAIT,
+            TemplateVisual.CLEAN,
+            TemplateVisual.GPS_COMPACT,
+            TemplateVisual.POSTCARD
+        )
         val floatingMargin = ((if (visual == TemplateVisual.CLEAN) 14 else 10) * density).toInt()
-        params.gravity = if (visual == TemplateVisual.TRAVEL) Gravity.TOP else Gravity.BOTTOM
-        params.marginStart = if (visual == TemplateVisual.TRAVEL || visual == TemplateVisual.CLEAN) floatingMargin else 0
-        params.marginEnd = if (visual == TemplateVisual.TRAVEL || visual == TemplateVisual.CLEAN) floatingMargin else 0
-        params.topMargin = if (visual == TemplateVisual.TRAVEL) floatingMargin else 0
-        params.bottomMargin = if (visual == TemplateVisual.CLEAN) floatingMargin else 0
+        params.gravity = Gravity.BOTTOM
+        params.marginStart = if (floating) floatingMargin else 0
+        params.marginEnd = if (floating) floatingMargin else 0
+        params.topMargin = 0
+        params.bottomMargin = if (floating) floatingMargin else 0
         overlay.layoutParams = params
 
         val background = when (visual) {
             TemplateVisual.CLASSIC -> R.drawable.bg_template_classic
             TemplateVisual.TRAVEL -> R.drawable.bg_template_travel
+            TemplateVisual.PORTRAIT -> R.drawable.bg_template_portrait
             TemplateVisual.CLEAN -> R.drawable.bg_template_clean
+            TemplateVisual.GPS_COMPACT -> R.drawable.bg_template_gps_compact
+            TemplateVisual.POSTCARD -> R.drawable.bg_template_postcard
             TemplateVisual.EVIDENCE -> R.drawable.bg_template_evidence
         }
         overlay.setBackgroundResource(background)
@@ -833,14 +1076,20 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             when (visual) {
                 TemplateVisual.CLASSIC -> R.string.template_eyebrow_classic
                 TemplateVisual.TRAVEL -> R.string.template_eyebrow_travel
+                TemplateVisual.PORTRAIT -> R.string.template_eyebrow_portrait
                 TemplateVisual.EVIDENCE -> R.string.template_eyebrow_evidence
+                TemplateVisual.GPS_COMPACT -> R.string.template_eyebrow_gps_compact
+                TemplateVisual.POSTCARD -> R.string.template_eyebrow_postcard
                 TemplateVisual.CLEAN -> R.string.template_eyebrow_classic
             }
         )
 
         val titleColor = when (visual) {
             TemplateVisual.TRAVEL -> Color.rgb(255, 236, 190)
+            TemplateVisual.PORTRAIT -> Color.rgb(237, 233, 254)
             TemplateVisual.CLEAN -> Color.rgb(20, 24, 31)
+            TemplateVisual.GPS_COMPACT -> Color.rgb(224, 242, 254)
+            TemplateVisual.POSTCARD -> Color.rgb(255, 237, 213)
             TemplateVisual.EVIDENCE -> Color.rgb(255, 193, 7)
             TemplateVisual.CLASSIC -> Color.WHITE
         }
@@ -850,7 +1099,10 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         eyebrow.setTextColor(
             when (visual) {
                 TemplateVisual.TRAVEL -> Color.rgb(255, 184, 92)
+                TemplateVisual.PORTRAIT -> Color.rgb(196, 181, 253)
                 TemplateVisual.EVIDENCE -> Color.rgb(255, 193, 7)
+                TemplateVisual.GPS_COMPACT -> Color.rgb(56, 189, 248)
+                TemplateVisual.POSTCARD -> Color.rgb(251, 146, 60)
                 else -> Color.rgb(194, 222, 255)
             }
         )
@@ -867,11 +1119,25 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
                 templateBinding.tvPreviewTitle.textSize = 16f
                 templateBinding.tvPreviewMetadata.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
             }
+            TemplateVisual.PORTRAIT -> {
+                templateBinding.tvPreviewTitle.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                templateBinding.tvPreviewTitle.textSize = 15f
+            }
             TemplateVisual.CLEAN -> {
                 templateBinding.previewTextGroup.gravity = Gravity.CENTER_HORIZONTAL
                 templateBinding.tvPreviewTitle.gravity = Gravity.CENTER
                 templateBinding.tvPreviewMetadata.gravity = Gravity.CENTER
                 templateBinding.tvPreviewTitle.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                templateBinding.tvPreviewTitle.textSize = 16f
+            }
+            TemplateVisual.GPS_COMPACT -> {
+                templateBinding.tvPreviewTitle.typeface = Typeface.MONOSPACE
+                templateBinding.tvPreviewMetadata.typeface = Typeface.MONOSPACE
+                templateBinding.tvPreviewTitle.textSize = 13f
+            }
+            TemplateVisual.POSTCARD -> {
+                templateBinding.tvPreviewTitle.typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD)
+                templateBinding.tvPreviewMetadata.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
                 templateBinding.tvPreviewTitle.textSize = 16f
             }
             TemplateVisual.EVIDENCE -> {
@@ -885,7 +1151,10 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         val accent = when (visual) {
             TemplateVisual.CLASSIC -> Color.WHITE
             TemplateVisual.TRAVEL -> Color.rgb(255, 184, 92)
+            TemplateVisual.PORTRAIT -> Color.rgb(139, 92, 246)
             TemplateVisual.CLEAN -> Color.rgb(30, 41, 59)
+            TemplateVisual.GPS_COMPACT -> Color.rgb(14, 165, 233)
+            TemplateVisual.POSTCARD -> Color.rgb(249, 115, 22)
             TemplateVisual.EVIDENCE -> Color.rgb(255, 193, 7)
         }
         templateBinding.ivTemplateMap.imageTintList = ColorStateList.valueOf(accent)
@@ -893,22 +1162,26 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             when (visual) {
                 TemplateVisual.CLASSIC -> R.drawable.bg_template_map_classic
                 TemplateVisual.TRAVEL -> R.drawable.bg_template_map_travel
+                TemplateVisual.PORTRAIT -> R.drawable.bg_template_map_portrait
                 TemplateVisual.CLEAN -> R.drawable.bg_template_map
+                TemplateVisual.GPS_COMPACT -> R.drawable.bg_template_map_gps_compact
+                TemplateVisual.POSTCARD -> R.drawable.bg_template_map_postcard
                 TemplateVisual.EVIDENCE -> R.drawable.bg_template_map_evidence
             }
         )
-        if (visual == TemplateVisual.CLASSIC) {
-            overlay.removeView(templateBinding.ivTemplateMap)
-            overlay.addView(templateBinding.ivTemplateMap, 0)
-        }
+        overlay.removeView(templateBinding.ivTemplateMap)
+        overlay.addView(
+            templateBinding.ivTemplateMap,
+            if (visual == TemplateVisual.CLASSIC) 0 else overlay.childCount
+        )
         (templateBinding.ivTemplateMap.layoutParams as LinearLayout.LayoutParams).apply {
             width = ((when (visual) {
-                TemplateVisual.TRAVEL -> 76
+                TemplateVisual.TRAVEL, TemplateVisual.POSTCARD -> 76
                 TemplateVisual.EVIDENCE -> 68
                 else -> 64
             }) * density).toInt()
             height = ((when (visual) {
-                TemplateVisual.TRAVEL -> 54
+                TemplateVisual.TRAVEL, TemplateVisual.POSTCARD -> 54
                 TemplateVisual.EVIDENCE -> 52
                 else -> 48
             }) * density).toInt()
@@ -960,18 +1233,28 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         val overlay = previewBinding.fullScreenPreviewOverlay
         val params = overlay.layoutParams as FrameLayout.LayoutParams
         val density = resources.displayMetrics.density
+        val floating = visual in setOf(
+            TemplateVisual.TRAVEL,
+            TemplateVisual.PORTRAIT,
+            TemplateVisual.CLEAN,
+            TemplateVisual.GPS_COMPACT,
+            TemplateVisual.POSTCARD
+        )
         val margin = ((if (visual == TemplateVisual.CLEAN) 20 else 16) * density).toInt()
-        params.gravity = if (visual == TemplateVisual.TRAVEL) Gravity.TOP else Gravity.BOTTOM
-        params.marginStart = if (visual == TemplateVisual.CLEAN || visual == TemplateVisual.TRAVEL) margin else 0
-        params.marginEnd = if (visual == TemplateVisual.CLEAN || visual == TemplateVisual.TRAVEL) margin else 0
-        params.topMargin = if (visual == TemplateVisual.TRAVEL) margin else 0
-        params.bottomMargin = if (visual == TemplateVisual.CLEAN) margin else 0
+        params.gravity = Gravity.BOTTOM
+        params.marginStart = if (floating) margin else 0
+        params.marginEnd = if (floating) margin else 0
+        params.topMargin = 0
+        params.bottomMargin = if (floating) margin else 0
         overlay.layoutParams = params
         overlay.setBackgroundResource(
             when (visual) {
                 TemplateVisual.CLASSIC -> R.drawable.bg_template_classic
                 TemplateVisual.TRAVEL -> R.drawable.bg_template_travel
+                TemplateVisual.PORTRAIT -> R.drawable.bg_template_portrait
                 TemplateVisual.CLEAN -> R.drawable.bg_template_clean
+                TemplateVisual.GPS_COMPACT -> R.drawable.bg_template_gps_compact
+                TemplateVisual.POSTCARD -> R.drawable.bg_template_postcard
                 TemplateVisual.EVIDENCE -> R.drawable.bg_template_evidence
             }
         )
@@ -985,14 +1268,20 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             when (visual) {
                 TemplateVisual.CLASSIC -> R.string.template_eyebrow_classic
                 TemplateVisual.TRAVEL -> R.string.template_eyebrow_travel
+                TemplateVisual.PORTRAIT -> R.string.template_eyebrow_portrait
                 TemplateVisual.EVIDENCE -> R.string.template_eyebrow_evidence
+                TemplateVisual.GPS_COMPACT -> R.string.template_eyebrow_gps_compact
+                TemplateVisual.POSTCARD -> R.string.template_eyebrow_postcard
                 TemplateVisual.CLEAN -> R.string.template_eyebrow_classic
             }
         )
 
         val titleColor = when (visual) {
             TemplateVisual.TRAVEL -> Color.rgb(255, 236, 190)
+            TemplateVisual.PORTRAIT -> Color.rgb(237, 233, 254)
             TemplateVisual.CLEAN -> Color.rgb(20, 24, 31)
+            TemplateVisual.GPS_COMPACT -> Color.rgb(224, 242, 254)
+            TemplateVisual.POSTCARD -> Color.rgb(255, 237, 213)
             TemplateVisual.EVIDENCE -> Color.rgb(255, 193, 7)
             TemplateVisual.CLASSIC -> Color.WHITE
         }
@@ -1003,7 +1292,10 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         eyebrow.setTextColor(
             when (visual) {
                 TemplateVisual.TRAVEL -> Color.rgb(255, 184, 92)
+                TemplateVisual.PORTRAIT -> Color.rgb(196, 181, 253)
                 TemplateVisual.EVIDENCE -> Color.rgb(255, 193, 7)
+                TemplateVisual.GPS_COMPACT -> Color.rgb(56, 189, 248)
+                TemplateVisual.POSTCARD -> Color.rgb(251, 146, 60)
                 else -> Color.rgb(194, 222, 255)
             }
         )
@@ -1015,10 +1307,27 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
                 previewBinding.tvFullScreenPreviewTitle.textSize = 20f
                 previewBinding.tvFullScreenPreviewMetadata.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
             }
+            TemplateVisual.PORTRAIT -> {
+                previewBinding.tvFullScreenPreviewTitle.typeface =
+                    Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                previewBinding.tvFullScreenPreviewTitle.textSize = 19f
+            }
             TemplateVisual.CLEAN -> {
                 previewBinding.fullScreenPreviewTextGroup.gravity = Gravity.CENTER_HORIZONTAL
                 previewBinding.tvFullScreenPreviewTitle.gravity = Gravity.CENTER
                 previewBinding.tvFullScreenPreviewMetadata.gravity = Gravity.CENTER
+                previewBinding.tvFullScreenPreviewTitle.textSize = 20f
+            }
+            TemplateVisual.GPS_COMPACT -> {
+                previewBinding.tvFullScreenPreviewTitle.typeface = Typeface.MONOSPACE
+                previewBinding.tvFullScreenPreviewMetadata.typeface = Typeface.MONOSPACE
+                previewBinding.tvFullScreenPreviewTitle.textSize = 17f
+            }
+            TemplateVisual.POSTCARD -> {
+                previewBinding.tvFullScreenPreviewTitle.typeface =
+                    Typeface.create(Typeface.SERIF, Typeface.BOLD)
+                previewBinding.tvFullScreenPreviewMetadata.typeface =
+                    Typeface.create(Typeface.SERIF, Typeface.NORMAL)
                 previewBinding.tvFullScreenPreviewTitle.textSize = 20f
             }
             TemplateVisual.EVIDENCE -> {
@@ -1030,7 +1339,10 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         val accent = when (visual) {
             TemplateVisual.CLASSIC -> Color.WHITE
             TemplateVisual.TRAVEL -> Color.rgb(255, 184, 92)
+            TemplateVisual.PORTRAIT -> Color.rgb(139, 92, 246)
             TemplateVisual.CLEAN -> Color.rgb(30, 41, 59)
+            TemplateVisual.GPS_COMPACT -> Color.rgb(14, 165, 233)
+            TemplateVisual.POSTCARD -> Color.rgb(249, 115, 22)
             TemplateVisual.EVIDENCE -> Color.rgb(255, 193, 7)
         }
         previewBinding.ivFullScreenTemplateMap.imageTintList = ColorStateList.valueOf(accent)
@@ -1038,7 +1350,10 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             when (visual) {
                 TemplateVisual.CLASSIC -> R.drawable.bg_template_map_classic
                 TemplateVisual.TRAVEL -> R.drawable.bg_template_map_travel
+                TemplateVisual.PORTRAIT -> R.drawable.bg_template_map_portrait
                 TemplateVisual.CLEAN -> R.drawable.bg_template_map
+                TemplateVisual.GPS_COMPACT -> R.drawable.bg_template_map_gps_compact
+                TemplateVisual.POSTCARD -> R.drawable.bg_template_map_postcard
                 TemplateVisual.EVIDENCE -> R.drawable.bg_template_map_evidence
             }
         )
@@ -1047,19 +1362,28 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             overlay.addView(previewBinding.ivFullScreenTemplateMap, 0)
         }
         (previewBinding.ivFullScreenTemplateMap.layoutParams as LinearLayout.LayoutParams).apply {
-            width = ((if (visual == TemplateVisual.TRAVEL) 104 else 88) * density).toInt()
-            height = ((if (visual == TemplateVisual.TRAVEL) 76 else 66) * density).toInt()
+            width = ((if (visual == TemplateVisual.TRAVEL || visual == TemplateVisual.POSTCARD) 104 else 88) * density).toInt()
+            height = ((if (visual == TemplateVisual.TRAVEL || visual == TemplateVisual.POSTCARD) 76 else 66) * density).toInt()
             marginStart = if (visual == TemplateVisual.CLASSIC) 0 else (14 * density).toInt()
             marginEnd = if (visual == TemplateVisual.CLASSIC) (16 * density).toInt() else 0
         }
     }
 
     private fun applyTemplate(style: ImageStyle, chipId: Int, @StringRes label: Int) {
-        binding.smartCaptureSwitch.isChecked = true
-        binding.styleChips.check(chipId)
+        updatingStyleSelection = true
+        try {
+            binding.smartCaptureSwitch.isChecked = true
+            binding.styleChips.check(chipId)
+        } finally {
+            updatingStyleSelection = false
+        }
+        gti.enableSmartCapture(true)
         applyStyle(style)
+        saveSelectedStyle(style)
+        updateTemplateSelectionButtons(style)
         binding.tvActiveTemplate.setText(label)
         binding.bottomNavigation.selectedItemId = R.id.navCamera
+        gti.prepareCaptureMetadata()
         showMessage(getString(R.string.template_applied))
     }
 
@@ -1418,23 +1742,49 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     }
 
     private fun loadRecentHistory() {
+        if (recentHistoryLoadInFlight) {
+            recentHistoryReloadPending = true
+            return
+        }
+        recentHistoryLoadInFlight = true
+        binding.recentLoading.visibility = View.VISIBLE
+        binding.recentEmpty.visibility = View.GONE
         backgroundExecutor.execute {
-            val records = historyRepository.loadRecentPhotos()
+            val records = runCatching { historyRepository.loadRecentPhotos() }.getOrDefault(emptyList())
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
+                recentHistoryLoadInFlight = false
+                binding.recentLoading.visibility = View.GONE
                 recentAdapter.submitList(records)
                 binding.recentEmpty.visibility = if (records.isEmpty()) View.VISIBLE else View.GONE
+                if (recentHistoryReloadPending) {
+                    recentHistoryReloadPending = false
+                    loadRecentHistory()
+                }
             }
         }
     }
 
     private fun loadSavedPhotos() {
+        if (savedHistoryLoadInFlight) {
+            savedHistoryReloadPending = true
+            return
+        }
+        savedHistoryLoadInFlight = true
+        binding.savedLoading.visibility = View.VISIBLE
+        binding.savedEmpty.visibility = View.GONE
         backgroundExecutor.execute {
-            val records = historyRepository.loadAllSavedPhotos()
+            val records = runCatching { historyRepository.loadAllSavedPhotos() }.getOrDefault(emptyList())
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
+                savedHistoryLoadInFlight = false
+                binding.savedLoading.visibility = View.GONE
                 savedAdapter.submitList(records)
                 binding.savedEmpty.visibility = if (records.isEmpty()) View.VISIBLE else View.GONE
+                if (savedHistoryReloadPending) {
+                    savedHistoryReloadPending = false
+                    loadSavedPhotos()
+                }
             }
         }
     }
@@ -1490,6 +1840,8 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
                 capturedPreviewBitmap?.recycle()
                 capturedPreviewBitmap = bitmap
                 binding.ivImage.setImageBitmap(bitmap)
+                binding.ivLatestThumbnail.setImageBitmap(bitmap)
+                binding.cardLatestThumbnail.visibility = View.VISIBLE
                 binding.ivImage.visibility = View.VISIBLE
                 binding.emptyState.visibility = View.GONE
                 binding.ivClose.visibility = View.VISIBLE
@@ -1503,14 +1855,14 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         }
     }
 
-    private fun decodePreview(uri: Uri): Bitmap? = runCatching {
+    private fun decodePreview(uri: Uri, maxSide: Int = THUMBNAIL_MAX_SIDE): Bitmap? = runCatching {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             ImageDecoder.decodeBitmap(ImageDecoder.createSource(contentResolver, uri)) { decoder, info, _ ->
                 val width = info.size.width
                 val height = info.size.height
                 val largestSide = maxOf(width, height)
-                if (largestSide > PREVIEW_MAX_SIDE) {
-                    val scale = PREVIEW_MAX_SIDE.toFloat() / largestSide
+                if (largestSide > maxSide) {
+                    val scale = maxSide.toFloat() / largestSide
                     decoder.setTargetSize((width * scale).toInt(), (height * scale).toInt())
                 }
                 decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
@@ -1519,11 +1871,49 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
             var sample = 1
-            while (maxOf(bounds.outWidth, bounds.outHeight) / sample > PREVIEW_MAX_SIDE) sample *= 2
+            while (maxOf(bounds.outWidth, bounds.outHeight) / sample > maxSide) sample *= 2
             val options = BitmapFactory.Options().apply { inSampleSize = sample }
             contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
         }
     }.getOrNull()
+
+    private fun showCapturedPhotoFullScreen() {
+        val uri = gtiUri ?: return
+        if (fullPhotoPreviewDialog?.isShowing == true) return
+        val previewBinding = com.geotagcv.databinding.DialogCapturedPhotoPreviewBinding.inflate(layoutInflater)
+        val dialog = Dialog(this, R.style.Theme_GeoTagPhoto_FullScreenPreview)
+        fullPhotoPreviewDialog = dialog
+        previewBinding.fullPhotoProgress.visibility = View.VISIBLE
+        previewBinding.btnCloseFullPhoto.setOnClickListener { dialog.dismiss() }
+        dialog.setContentView(previewBinding.root)
+        dialog.setOnDismissListener {
+            fullPhotoPreviewDialog = null
+            previewBinding.ivFullPhoto.setImageDrawable(null)
+            fullPhotoPreviewBitmap?.recycle()
+            fullPhotoPreviewBitmap = null
+        }
+        dialog.show()
+        dialog.window?.setLayout(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT
+        )
+        backgroundExecutor.execute {
+            val bitmap = decodePreview(uri, PREVIEW_MAX_SIDE)
+            runOnUiThread {
+                if (dialog.isShowing && gtiUri == uri) {
+                    previewBinding.fullPhotoProgress.visibility = View.GONE
+                    if (bitmap == null) {
+                        showMessage(getString(R.string.photo_preview_load_failed))
+                    } else {
+                        fullPhotoPreviewBitmap = bitmap
+                        previewBinding.ivFullPhoto.setImageBitmap(bitmap)
+                    }
+                } else {
+                    bitmap?.recycle()
+                }
+            }
+        }
+    }
 
     private fun getUriFileSize(uri: Uri): String {
         val bytes = runCatching {
@@ -1568,6 +1958,8 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
         previewRequestVersion++
         tagLocationRequestVersion++
         locationGateDialog?.dismiss()
+        locationServicesDialog?.dismiss()
+        fullPhotoPreviewDialog?.dismiss()
         tagPhotoDialog?.dismiss()
         binding.ivImage.setImageDrawable(null)
         capturedPreviewBitmap?.recycle()
@@ -1582,8 +1974,9 @@ class MainActivity : AppCompatActivity(), PermissionCallback {
     companion object {
         private const val PREFERENCES_NAME = "geo_tag_photo_settings"
         private const val PREF_SAVE_ORIGINAL = "save_original_photo"
-        private const val PREF_LOCATION_REQUESTED = "location_permission_requested"
+        private const val PREF_SELECTED_STYLE = "selected_image_style"
         private const val PREVIEW_MAX_SIDE = 1600
+        private const val THUMBNAIL_MAX_SIDE = 480
         private const val REVIEW_MAX_SIDE = 1600
     }
 }

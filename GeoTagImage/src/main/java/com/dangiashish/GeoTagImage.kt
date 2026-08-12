@@ -62,6 +62,7 @@ import android.util.Size
 import android.view.MotionEvent
 import android.view.OrientationEventListener
 import android.view.ScaleGestureDetector
+import android.view.Surface
 import android.view.Window
 import android.widget.SeekBar
 import android.widget.Toast
@@ -154,6 +155,12 @@ class GeoTagImage(
     private var isEnabled = true
     private var currentPhotoPath: String? = null
     private var latestLocation: Location? = null
+    private val captureMetadataLock = Any()
+    private var captureMetadataReadyAt = 0L
+    private var captureMetadataPreparationInFlight = false
+    private var captureMetadataGeneration = 0L
+    private var captureMetadataCleanedUp = false
+    private val captureMetadataWaiters = mutableListOf<() -> Unit>()
     private var directoryName: String? = "Camera"
     private var customPlace: String? = null
     private var customAddress: String? = null
@@ -196,6 +203,8 @@ class GeoTagImage(
         LANDSCAPE,
         PORTRAIT,
         SQUARE,
+        GPS_COMPACT,
+        POSTCARD,
         FIELD_PROOF
     }
 
@@ -284,8 +293,74 @@ class GeoTagImage(
             return
         }
 
+        prepareCaptureMetadata()
         createCameraDialog(onImageCaptured)
         startCameraX()
+    }
+
+    /**
+     * Starts location, address, and map preparation while the user frames the photo.
+     * A shutter press joins the same request instead of starting the slow work again.
+     */
+    fun prepareCaptureMetadata(onReady: (() -> Unit)? = null) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        var completeImmediately = false
+        var generationToPrepare: Long? = null
+        synchronized(captureMetadataLock) {
+            if (captureMetadataCleanedUp) return
+            val hasUsableCoordinates = latestLocation != null ||
+                (customLatitude != null && customLongitude != null)
+            if (hasUsableCoordinates && captureMetadataReadyAt > 0L &&
+                now - captureMetadataReadyAt <= CAPTURE_METADATA_MAX_AGE_MS
+            ) {
+                completeImmediately = true
+            } else {
+                onReady?.let(captureMetadataWaiters::add)
+                if (!captureMetadataPreparationInFlight) {
+                    captureMetadataPreparationInFlight = true
+                    generationToPrepare = captureMetadataGeneration
+                }
+            }
+        }
+
+        if (completeImmediately) {
+            onReady?.invoke()
+            return
+        }
+        generationToPrepare?.let(::startCaptureMetadataPreparation)
+    }
+
+    private fun startCaptureMetadataPreparation(generation: Long) {
+        val onComplete = { finishCaptureMetadataPreparation(generation) }
+        when {
+            customLatitude != null && customLongitude != null ->
+                loadMapForCurrentLocation(onComplete)
+            latestLocation != null && captureMetadataReadyAt == 0L ->
+                loadMapForCurrentLocation(onComplete)
+            else -> fetchCurrentLocation(onComplete)
+        }
+    }
+
+    private fun finishCaptureMetadataPreparation(completedGeneration: Long) {
+        var retryGeneration: Long? = null
+        val waiters = synchronized(captureMetadataLock) {
+            if (captureMetadataCleanedUp) {
+                captureMetadataPreparationInFlight = false
+                captureMetadataWaiters.clear()
+                return@synchronized emptyList()
+            }
+            if (completedGeneration != captureMetadataGeneration) {
+                // A map-affecting setting changed while location/map work was running.
+                // Keep the callers waiting until the replacement metadata is ready.
+                retryGeneration = captureMetadataGeneration
+                return@synchronized emptyList()
+            }
+            captureMetadataReadyAt = android.os.SystemClock.elapsedRealtime()
+            captureMetadataPreparationInFlight = false
+            captureMetadataWaiters.toList().also { captureMetadataWaiters.clear() }
+        }
+        retryGeneration?.let(::startCaptureMetadataPreparation)
+        if (retryGeneration == null) waiters.forEach { it.invoke() }
     }
 
     private fun createCameraDialog(onImageCaptured: (Uri?) -> Unit) {
@@ -425,7 +500,10 @@ class GeoTagImage(
         orientationListener = object : OrientationEventListener(context) {
             override fun onOrientationChanged(orientation: Int) {
                 if (orientation == ORIENTATION_UNKNOWN) return
-                val landscape = orientation in 45..134 || orientation in 225..314
+                // Follow the orientation Android is actually displaying. Physical sensor
+                // orientation can disagree when the user has rotation lock enabled.
+                val landscape = context.resources.configuration.orientation ==
+                    Configuration.ORIENTATION_LANDSCAPE
                 if (landscape != deviceIsLandscape) {
                     deviceIsLandscape = landscape
                     updateSmartCameraUi()
@@ -556,6 +634,10 @@ class GeoTagImage(
                 }
             )
 
+        val targetRotation = binding.previewView.display?.rotation ?: Surface.ROTATION_0
+        previewBuilder.setTargetRotation(targetRotation)
+        imageCaptureBuilder.setTargetRotation(targetRotation)
+
         if (resolvedRatio == RATIO_1X1) {
             val size = Size(1080, 1080)
             previewBuilder.setTargetResolution(size)
@@ -631,45 +713,53 @@ class GeoTagImage(
             return
         }
 
-        // Get current location first
-        fetchCurrentLocation {
-            // Create output file
-            val photoFile = createImageInternally()
-            if (photoFile == null) {
-                ContextCompat.getMainExecutor(context).execute {
-                    onImageCaptured(null)
-                    closeCameraDialog()
-                }
-                return@fetchCurrentLocation
+        // Take the photo immediately. Location, address, and map preparation has already
+        // been running while the user frames the shot and is joined only before rendering.
+        val photoFile = createImageInternally()
+        if (photoFile == null) {
+            ContextCompat.getMainExecutor(context).execute {
+                onImageCaptured(null)
+                closeCameraDialog()
             }
+            return
+        }
 
-            val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
 
-            imageCapture.takePicture(
-                outputOptions,
-                cameraExecutor,
-                object : ImageCapture.OnImageSavedCallback {
-                    override fun onError(exception: ImageCaptureException) {
-                        (context as? Activity)?.runOnUiThread {
-                            onImageCaptured(null)
-                            closeCameraDialog()
-                        }
+        imageCapture.takePicture(
+            outputOptions,
+            cameraExecutor,
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onError(exception: ImageCaptureException) {
+                    (context as? Activity)?.runOnUiThread {
+                        onImageCaptured(null)
+                        closeCameraDialog()
                     }
+                }
 
-                    override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                        currentPhotoPath = photoFile.absolutePath
-
-                        // Process the captured image
-                        val processedUri = processCapturedImage()
-
-                        (context as? Activity)?.runOnUiThread {
-                            onImageCaptured(processedUri)
-                            closeCameraDialog()
+                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                    currentPhotoPath = photoFile.absolutePath
+                    prepareCaptureMetadata {
+                        // Metadata completion can arrive on the main thread. Keep bitmap decode,
+                        // crop, overlay and MediaStore writes on the camera worker.
+                        runCatching {
+                            cameraExecutor.execute {
+                                val processedUri = processCapturedImage()
+                                (context as? Activity)?.runOnUiThread {
+                                    onImageCaptured(processedUri)
+                                    closeCameraDialog()
+                                }
+                            }
+                        }.onFailure {
+                            (context as? Activity)?.runOnUiThread {
+                                onImageCaptured(null)
+                                closeCameraDialog()
+                            }
                         }
                     }
                 }
-            )
-        }
+            }
+        )
     }
 
     /**
@@ -939,11 +1029,16 @@ class GeoTagImage(
                 finalBitmap,
                 if (geoTagged && saveOriginalPhoto) "GEOTAG_" else "IMG_"
             )
-            val outputStream = file.outputStream()
-            finalBitmap.compress(outputCompressFormat(), outputQuality(), outputStream)
-            outputStream.close()
-
-            effectiveExifLocation()?.let { embedGeoTagInExif(filePath, it) }
+            if (savedUri == null) {
+                file.outputStream().use { outputStream ->
+                    finalBitmap.compress(outputCompressFormat(), outputQuality(), outputStream)
+                }
+                effectiveExifLocation()?.let { embedGeoTagInExif(filePath, it) }
+            } else {
+                // The processed photo is already safely written to MediaStore. Avoid a second
+                // JPEG/PNG compression pass and remove the app-private camera working file.
+                runCatching { file.delete() }
+            }
 
             finalBitmap.recycle()
 
@@ -1373,15 +1468,21 @@ class GeoTagImage(
         val livePlace = listOf(city, country).filter(String::isNotBlank).joinToString(", ")
         val resolvedPlace = customPlace ?: livePlace
         elementsList.addAll(
-            if (imageStyle == ImageStyle.SQUARE) {
-                buildList {
+            when (imageStyle) {
+                ImageStyle.SQUARE, ImageStyle.POSTCARD -> buildList {
                     resolvedPlace.takeIf(String::isNotBlank)?.let(::add)
                     formattedDate?.takeIf(String::isNotBlank)?.let(::add)
                     if (showAuthorName) add("$label $authorName")
                     if (showAppName) add("Captured via $exifAppName")
                 }
-            } else {
-                GTIMetadataFormatter.buildElements(
+                ImageStyle.GPS_COMPACT -> buildList {
+                    resolvedPlace.takeIf(String::isNotBlank)?.let(::add)
+                    if (showLatLng) {
+                        add(String.format(Locale.US, "%.6f, %.6f", effectiveLatitude, effectiveLongitude))
+                    }
+                    formattedDate?.takeIf(String::isNotBlank)?.let(::add)
+                }
+                else -> GTIMetadataFormatter.buildElements(
                     place = resolvedPlace,
                     address = customAddress ?: address,
                     latitude = effectiveLatitude,
@@ -1395,6 +1496,8 @@ class GeoTagImage(
         )
         when (imageStyle) {
             ImageStyle.LANDSCAPE -> elementsList.add(0, "TRAVEL LOG")
+            ImageStyle.GPS_COMPACT -> elementsList.add(0, "GPS • VERIFIED")
+            ImageStyle.POSTCARD -> elementsList.add(0, "POSTCARD • LOCATION")
             ImageStyle.FIELD_PROOF -> elementsList.add(0, "FIELD RECORD • GPS VERIFIED")
             else -> Unit
         }
@@ -1406,24 +1509,30 @@ class GeoTagImage(
             return result
         }
 
+        val responsiveTextSize = max(customTextSize, result.width * 0.022f)
         val textPaint = Paint().apply {
             color = when (imageStyle) {
                 ImageStyle.SQUARE -> Color.rgb(20, 24, 31)
                 ImageStyle.LANDSCAPE -> Color.rgb(255, 244, 214)
+                ImageStyle.PORTRAIT -> Color.rgb(245, 243, 255)
+                ImageStyle.GPS_COMPACT -> Color.rgb(224, 242, 254)
+                ImageStyle.POSTCARD -> Color.rgb(255, 237, 213)
                 ImageStyle.FIELD_PROOF -> Color.WHITE
                 else -> textColor
             }
             textSize = when (imageStyle) {
-                ImageStyle.LANDSCAPE -> customTextSize * 1.08f
-                ImageStyle.SQUARE -> customTextSize * 1.12f
-                ImageStyle.FIELD_PROOF -> customTextSize * 0.94f
-                else -> customTextSize
+                ImageStyle.LANDSCAPE, ImageStyle.POSTCARD -> responsiveTextSize * 1.08f
+                ImageStyle.SQUARE -> responsiveTextSize * 1.12f
+                ImageStyle.GPS_COMPACT, ImageStyle.FIELD_PROOF -> responsiveTextSize * 0.94f
+                else -> responsiveTextSize
             }
             isAntiAlias = true
             typeface = when (imageStyle) {
                 ImageStyle.LANDSCAPE -> Typeface.create(Typeface.SERIF, Typeface.BOLD)
                 ImageStyle.SQUARE -> Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                ImageStyle.FIELD_PROOF -> Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+                ImageStyle.POSTCARD -> Typeface.create(Typeface.SERIF, Typeface.BOLD)
+                ImageStyle.GPS_COMPACT, ImageStyle.FIELD_PROOF ->
+                    Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
                 else -> this@GeoTagImage.typeface
             }
             if (imageStyle != ImageStyle.SQUARE) setShadowLayer(1f, 0f, 1f, Color.BLACK)
@@ -1431,14 +1540,13 @@ class GeoTagImage(
 
         val bgPaint = Paint().apply {
             color = when (imageStyle) {
-                ImageStyle.LANDSCAPE -> Color.argb(220, 55, 35, 18)
-                ImageStyle.SQUARE -> Color.argb(235, 255, 255, 255)
-                ImageStyle.FIELD_PROOF -> Color.argb(240, 8, 25, 42)
-                else -> if (backgroundColor == Color.TRANSPARENT) {
-                    Color.argb(220, 9, 20, 31)
-                } else {
-                    backgroundColor
-                }
+                ImageStyle.LANDSCAPE -> Color.argb(150, 55, 35, 18)
+                ImageStyle.PORTRAIT -> Color.argb(190, 30, 27, 55)
+                ImageStyle.SQUARE -> Color.argb(180, 255, 255, 255)
+                ImageStyle.GPS_COMPACT -> Color.argb(190, 8, 47, 73)
+                ImageStyle.POSTCARD -> Color.argb(185, 67, 36, 20)
+                ImageStyle.FIELD_PROOF -> Color.argb(165, 8, 25, 42)
+                else -> backgroundColor
             }
         }
 
@@ -1457,6 +1565,8 @@ class GeoTagImage(
         val maxTextWidth = when (imageStyle) {
             ImageStyle.SQUARE -> result.width - 112
             ImageStyle.LANDSCAPE -> result.width - effectiveMapWidth - 112
+            ImageStyle.PORTRAIT, ImageStyle.GPS_COMPACT, ImageStyle.POSTCARD ->
+                result.width - effectiveMapWidth - 112
             ImageStyle.FIELD_PROOF -> result.width - effectiveMapWidth - 104
             else -> result.width - effectiveMapWidth - 92
         }.coerceAtLeast(220)
@@ -1498,14 +1608,15 @@ class GeoTagImage(
         var resolvedMapTop = 0f
 
         when (imageStyle) {
-            ImageStyle.LANDSCAPE -> {
+            ImageStyle.LANDSCAPE, ImageStyle.PORTRAIT,
+            ImageStyle.GPS_COMPACT, ImageStyle.POSTCARD -> {
                 left = edge
-                top = edge
                 right = result.width - effectiveMapWidth - edge - if (effectiveMapWidth > 0) gap else 0f
-                bottom = top + blockHeight
-                textX = left + padding + 8f
+                bottom = result.height - edge
+                top = bottom - blockHeight
+                textX = left + padding + if (imageStyle == ImageStyle.LANDSCAPE) 8f else 0f
                 resolvedMapLeft = result.width - effectiveMapWidth - edge
-                resolvedMapTop = edge
+                resolvedMapTop = bottom - mapHeight
             }
             ImageStyle.SQUARE -> {
                 left = result.width * 0.07f
@@ -1537,15 +1648,29 @@ class GeoTagImage(
         }
 
         val cornerRadius = when (imageStyle) {
-            ImageStyle.LANDSCAPE -> 26f
+            ImageStyle.LANDSCAPE, ImageStyle.PORTRAIT,
+            ImageStyle.GPS_COMPACT, ImageStyle.POSTCARD -> 26f
             ImageStyle.SQUARE -> 32f
-            ImageStyle.FIELD_PROOF, ImageStyle.SMART_AUTO, ImageStyle.PORTRAIT -> 0f
+            ImageStyle.FIELD_PROOF, ImageStyle.SMART_AUTO -> 0f
         }
         canvas.drawRoundRect(RectF(left, top, right, bottom), cornerRadius, cornerRadius, bgPaint)
 
         when (imageStyle) {
             ImageStyle.LANDSCAPE -> Paint().apply {
                 color = Color.rgb(255, 184, 92)
+                strokeWidth = 8f
+                strokeCap = Paint.Cap.ROUND
+            }.also { canvas.drawLine(left + 12f, top + 18f, left + 12f, bottom - 18f, it) }
+            ImageStyle.PORTRAIT -> Paint().apply {
+                color = Color.rgb(139, 92, 246)
+                strokeWidth = 7f
+            }.also { canvas.drawLine(left + 18f, top, right - 18f, top, it) }
+            ImageStyle.GPS_COMPACT -> Paint().apply {
+                color = Color.rgb(14, 165, 233)
+                strokeWidth = 7f
+            }.also { canvas.drawLine(left, top, right, top, it) }
+            ImageStyle.POSTCARD -> Paint().apply {
+                color = Color.rgb(249, 115, 22)
                 strokeWidth = 8f
                 strokeCap = Paint.Cap.ROUND
             }.also { canvas.drawLine(left + 12f, top + 18f, left + 12f, bottom - 18f, it) }
@@ -1562,11 +1687,16 @@ class GeoTagImage(
                 val frameWidth = if (imageStyle == ImageStyle.FIELD_PROOF) 3f else 4f
                 val frameColor = when (imageStyle) {
                     ImageStyle.LANDSCAPE -> Color.rgb(255, 184, 92)
+                    ImageStyle.PORTRAIT -> Color.rgb(139, 92, 246)
+                    ImageStyle.GPS_COMPACT -> Color.rgb(14, 165, 233)
+                    ImageStyle.POSTCARD -> Color.rgb(249, 115, 22)
                     ImageStyle.FIELD_PROOF -> Color.rgb(255, 193, 7)
                     else -> Color.WHITE
                 }
                 Paint().apply { color = frameColor; isAntiAlias = true }.also { framePaint ->
-                    val frameRadius = if (imageStyle == ImageStyle.LANDSCAPE) 16f else 3f
+                    val frameRadius = if (
+                        imageStyle == ImageStyle.LANDSCAPE || imageStyle == ImageStyle.POSTCARD
+                    ) 16f else 3f
                     canvas.drawRoundRect(
                         RectF(
                             resolvedMapLeft - frameWidth,
@@ -1580,6 +1710,7 @@ class GeoTagImage(
                     )
                 }
                 canvas.drawBitmap(scaledMap, resolvedMapLeft, resolvedMapTop, design)
+                if (scaledMap !== it) scaledMap.recycle()
             }
         }
 
@@ -1742,12 +1873,17 @@ class GeoTagImage(
         latitude: Double? = null,
         longitude: Double? = null
     ) {
+        val previousLatitude = customLatitude
+        val previousLongitude = customLongitude
         customPlace = place?.trim()?.takeIf(String::isNotEmpty)
         customAddress = address?.trim()?.takeIf(String::isNotEmpty)
         val validCoordinates = latitude != null && longitude != null &&
                 latitude in -90.0..90.0 && longitude in -180.0..180.0
         customLatitude = if (validCoordinates) latitude else null
         customLongitude = if (validCoordinates) longitude else null
+        if (previousLatitude != customLatitude || previousLongitude != customLongitude) {
+            invalidateCaptureMetadata()
+        }
     }
 
     /** Overrides capture date/time in the overlay and EXIF. Pass null to use current time. */
@@ -1757,11 +1893,13 @@ class GeoTagImage(
 
     /** Clears all user-entered place, coordinate, and date/time overrides. */
     fun clearCustomMetadata() {
+        val hadCustomCoordinates = customLatitude != null || customLongitude != null
         customPlace = null
         customAddress = null
         customLatitude = null
         customLongitude = null
         customDateTimeMillis = null
+        if (hadCustomCoordinates) invalidateCaptureMetadata()
     }
 
     /**
@@ -1800,7 +1938,9 @@ class GeoTagImage(
      * @param showGoogleMap true to show Google Maps, false to hide Google Maps
      */
     fun showGoogleMap(showGoogleMap: Boolean) {
+        val changed = this.showGoogleMap != showGoogleMap
         this.showGoogleMap = showGoogleMap
+        if (changed) invalidateCaptureMetadata()
     }
 
     /**
@@ -1867,7 +2007,9 @@ class GeoTagImage(
      * settings after applying a style.
      */
     fun setImageStyle(style: ImageStyle) {
+        val changed = imageStyle != style
         imageStyle = style
+        if (changed) invalidateCaptureMetadata()
         smartCaptureEnabled = true
         autoStraightenEnabled = true
         imageExtension = JPEG
@@ -1904,6 +2046,20 @@ class GeoTagImage(
                 showGoogleMap = false
             }
 
+            ImageStyle.GPS_COMPACT -> {
+                cameraAspectRatio = RATIO_4X3
+                showDate = true
+                showLatLng = true
+                showGoogleMap = false
+            }
+
+            ImageStyle.POSTCARD -> {
+                cameraAspectRatio = RATIO_16X9
+                showDate = true
+                showLatLng = false
+                showGoogleMap = false
+            }
+
             ImageStyle.FIELD_PROOF -> {
                 cameraAspectRatio = RATIO_4X3
                 showDate = true
@@ -1918,9 +2074,21 @@ class GeoTagImage(
     }
 
     fun getSmartRecommendation(): SmartRecommendation {
+        if (imageStyle == ImageStyle.SMART_AUTO) {
+            val landscape = deviceIsLandscape
+            return SmartRecommendation(
+                ImageStyle.SMART_AUTO,
+                "Default template",
+                if (landscape) {
+                    "Default geo tag • landscape 16:9 framing"
+                } else {
+                    "Default geo tag • portrait 4:3 framing"
+                },
+                if (landscape) "16:9" else "4:3"
+            )
+        }
         val resolvedStyle = when {
             imageStyle != ImageStyle.SMART_AUTO -> imageStyle
-            deviceIsLandscape -> ImageStyle.LANDSCAPE
             else -> ImageStyle.PORTRAIT
         }
         return when (resolvedStyle) {
@@ -1947,6 +2115,18 @@ class GeoTagImage(
                 "Square 1:1",
                 "Centered crop • clean social-ready overlay",
                 "1:1"
+            )
+            ImageStyle.GPS_COMPACT -> SmartRecommendation(
+                resolvedStyle,
+                "GPS compact 4:3",
+                "Fast map-free stamp • coordinates and time preserved",
+                "4:3"
+            )
+            ImageStyle.POSTCARD -> SmartRecommendation(
+                resolvedStyle,
+                "Postcard 16:9",
+                "Warm place-and-date treatment • map hidden",
+                "16:9"
             )
             ImageStyle.FIELD_PROOF -> SmartRecommendation(
                 resolvedStyle,
@@ -2005,6 +2185,13 @@ class GeoTagImage(
 
             cameraProvider?.unbindAll()
 
+            synchronized(captureMetadataLock) {
+                captureMetadataCleanedUp = true
+                captureMetadataGeneration++
+                captureMetadataPreparationInFlight = false
+                captureMetadataReadyAt = 0L
+                captureMetadataWaiters.clear()
+            }
             mapBitmap?.recycle()
             mapBitmap = null
             latestLocation = null
@@ -2018,7 +2205,16 @@ class GeoTagImage(
      * Set MapView Style
      */
     fun setMapView(mapView: MapViewType) {
+        val changed = this.mapView != mapView
         this.mapView = mapView
+        if (changed) invalidateCaptureMetadata()
+    }
+
+    private fun invalidateCaptureMetadata() {
+        synchronized(captureMetadataLock) {
+            captureMetadataReadyAt = 0L
+            captureMetadataGeneration++
+        }
     }
 
     /**
@@ -2051,6 +2247,7 @@ class GeoTagImage(
         private const val TAG_OUTPUT_MAX_SIDE = 1280
         private const val MAP_TIMEOUT_MS = 4_000
         private const val GEOCODING_TIMEOUT_MS = 5_000L
+        private const val CAPTURE_METADATA_MAX_AGE_MS = 120_000L
     }
 
     /**

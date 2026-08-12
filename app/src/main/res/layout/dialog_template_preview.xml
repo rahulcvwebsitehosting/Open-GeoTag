@@ -13,7 +13,7 @@
         android:layout_marginVertical="12dp"
         android:background="@color/black"
         app:layout_constraintBottom_toTopOf="@id/fullScreenActions"
-        app:layout_constraintDimensionRatio="1024:405"
+        app:layout_constraintDimensionRatio="16:9"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">

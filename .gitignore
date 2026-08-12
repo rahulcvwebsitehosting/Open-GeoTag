@@ -13,6 +13,8 @@
 .externalNativeBuild
 .cxx
 local.properties
+/.codex-test-avd/
+/.kotlin/
 
 # Ignore local library module
 #/GeoTagImage/src/main/java/com/dangiashish/

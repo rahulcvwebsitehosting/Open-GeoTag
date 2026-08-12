@@ -21,8 +21,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingHorizontal="20dp"
-        android:paddingTop="24dp"
+        android:paddingHorizontal="@dimen/page_horizontal_padding"
+        android:paddingTop="@dimen/page_top_padding"
         android:paddingBottom="40dp">
 
         <LinearLayout
@@ -65,7 +65,7 @@
             android:layout_marginTop="12dp"
             android:text="@string/home_headline"
             android:textColor="@color/text_primary"
-            android:textSize="30sp"
+            android:textSize="@dimen/home_headline_text_size"
             android:textStyle="bold" />
 
         <TextView
@@ -80,7 +80,7 @@
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardPreview"
             android:layout_width="match_parent"
-            android:layout_height="280dp"
+            android:layout_height="@dimen/home_preview_height"
             android:layout_marginTop="22dp"
             app:cardBackgroundColor="@color/preview_background"
             app:cardCornerRadius="12dp"
@@ -170,19 +170,51 @@
             </FrameLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnCapture"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="58dp"
             android:layout_marginTop="14dp"
-            android:text="@string/open_smart_camera"
-            android:textAllCaps="false"
-            android:textSize="16sp"
-            app:backgroundTint="@color/primary"
-            app:cornerRadius="8dp"
-            app:icon="@drawable/ic_outline_camera_alt_24"
-            app:iconGravity="textStart"
-            app:iconPadding="10dp" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardLatestThumbnail"
+                android:layout_width="58dp"
+                android:layout_height="58dp"
+                android:layout_marginEnd="12dp"
+                android:clickable="true"
+                android:contentDescription="@string/open_latest_photo_preview"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:visibility="gone"
+                app:cardBackgroundColor="@color/preview_background"
+                app:cardCornerRadius="8dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/white"
+                app:strokeWidth="2dp">
+
+                <ImageView
+                    android:id="@+id/ivLatestThumbnail"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@null"
+                    android:scaleType="centerCrop" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCapture"
+                android:layout_width="0dp"
+                android:layout_height="58dp"
+                android:layout_weight="1"
+                android:text="@string/open_smart_camera"
+                android:textAllCaps="false"
+                android:textSize="16sp"
+                app:backgroundTint="@color/primary"
+                app:cornerRadius="8dp"
+                app:icon="@drawable/ic_outline_camera_alt_24"
+                app:iconGravity="textStart"
+                app:iconPadding="10dp" />
+        </LinearLayout>
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
@@ -256,6 +288,20 @@
                         android:layout_width="wrap_content"
                         android:layout_height="48dp"
                         android:text="@string/style_square" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipGpsCompact"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:text="@string/style_gps_compact" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipPostcard"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:text="@string/style_postcard" />
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/chipFieldProof"
@@ -711,20 +757,15 @@
         </LinearLayout>
         </androidx.core.widget.NestedScrollView>
 
-        <androidx.core.widget.NestedScrollView
+        <LinearLayout
             android:id="@+id/templatesPage"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:fillViewport="true"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/page_horizontal_padding"
+            android:paddingTop="@dimen/page_top_padding"
+            android:paddingBottom="16dp"
             android:visibility="gone">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingHorizontal="20dp"
-                android:paddingTop="24dp"
-                android:paddingBottom="32dp">
 
                 <TextView
                     android:layout_width="match_parent"
@@ -743,30 +784,28 @@
                     android:textColor="@color/text_secondary"
                     android:textSize="15sp" />
 
-                <include
-                    android:id="@+id/templateClassic"
-                    layout="@layout/item_template_preview"
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnDefaultTemplate"
+                    style="@style/Widget.Material3.Button"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp" />
+                    android:layout_height="52dp"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/switch_to_default_template"
+                    android:textAllCaps="false"
+                    app:cornerRadius="8dp"
+                    app:icon="@drawable/ic_templates_24"
+                    app:iconGravity="textStart"
+                    app:iconPadding="10dp" />
 
-                <include
-                    android:id="@+id/templateTravel"
-                    layout="@layout/item_template_preview"
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/templatesList"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content" />
-
-                <include
-                    android:id="@+id/templateClean"
-                    layout="@layout/item_template_preview"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content" />
-
-                <include
-                    android:id="@+id/templateEvidence"
-                    layout="@layout/item_template_preview"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content" />
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:layout_marginTop="10dp"
+                    android:clipToPadding="false"
+                    android:paddingBottom="8dp"
+                    android:scrollbars="vertical" />
 
                 <TextView
                     android:id="@+id/tvActiveTemplate"
@@ -779,8 +818,7 @@
                     android:textColor="@color/text_primary"
                     android:textSize="14sp"
                     android:textStyle="bold" />
-            </LinearLayout>
-        </androidx.core.widget.NestedScrollView>
+        </LinearLayout>
 
         <LinearLayout
             android:id="@+id/recentPage"
@@ -792,8 +830,8 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingHorizontal="20dp"
-                android:paddingTop="24dp"
+                android:paddingHorizontal="@dimen/page_horizontal_padding"
+                android:paddingTop="@dimen/page_top_padding"
                 android:text="@string/recent_title"
                 android:textColor="@color/text_primary"
                 android:textSize="28sp"
@@ -802,7 +840,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingHorizontal="20dp"
+                android:paddingHorizontal="@dimen/page_horizontal_padding"
                 android:paddingTop="6dp"
                 android:paddingBottom="10dp"
                 android:text="@string/recent_helper"
@@ -830,6 +868,13 @@
                     android:text="@string/recent_empty"
                     android:textColor="@color/text_secondary"
                     android:textSize="15sp" />
+
+                <ProgressBar
+                    android:id="@+id/recentLoading"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="center"
+                    android:visibility="gone" />
             </FrameLayout>
         </LinearLayout>
 
@@ -843,8 +888,8 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingHorizontal="20dp"
-                android:paddingTop="24dp"
+                android:paddingHorizontal="@dimen/page_horizontal_padding"
+                android:paddingTop="@dimen/page_top_padding"
                 android:text="@string/saved_photos_title"
                 android:textColor="@color/text_primary"
                 android:textSize="28sp"
@@ -853,7 +898,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingHorizontal="20dp"
+                android:paddingHorizontal="@dimen/page_horizontal_padding"
                 android:paddingTop="6dp"
                 android:paddingBottom="10dp"
                 android:text="@string/saved_photos_helper"
@@ -864,7 +909,7 @@
                 android:id="@+id/tagSavedPhotoCard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginHorizontal="20dp"
+                android:layout_marginHorizontal="@dimen/page_horizontal_padding"
                 android:layout_marginBottom="14dp"
                 app:cardBackgroundColor="@color/card_background"
                 app:cardCornerRadius="14dp"
@@ -941,6 +986,13 @@
                     android:text="@string/saved_photos_empty"
                     android:textColor="@color/text_secondary"
                     android:textSize="15sp" />
+
+                <ProgressBar
+                    android:id="@+id/savedLoading"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="center"
+                    android:visibility="gone" />
             </FrameLayout>
         </LinearLayout>
     </FrameLayout>

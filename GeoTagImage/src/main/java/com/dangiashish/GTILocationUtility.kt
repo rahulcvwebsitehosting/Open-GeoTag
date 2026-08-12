@@ -50,7 +50,8 @@ internal object GTILocationUtility {
 
     fun fetchLocation(context: Context, callback: (Location?) -> Unit) {
         if (fusedLocationProviderClient == null) {
-            fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(context)
+            fusedLocationProviderClient =
+                LocationServices.getFusedLocationProviderClient(context.applicationContext)
         }
 
         if (ActivityCompat.checkSelfPermission(
@@ -71,9 +72,15 @@ internal object GTILocationUtility {
 
         val delivered = AtomicBoolean(false)
         val mainHandler = Handler(Looper.getMainLooper())
+        val client = fusedLocationProviderClient ?: run {
+            callback(null)
+            return
+        }
+        var liveLocationCallback: LocationCallback? = null
         val deliverOnce: (Location?) -> Unit = { location ->
             if (delivered.compareAndSet(false, true)) {
                 mainHandler.removeCallbacksAndMessages(delivered)
+                liveLocationCallback?.let(client::removeLocationUpdates)
                 callback(location)
             }
         }
@@ -83,26 +90,32 @@ internal object GTILocationUtility {
             android.os.SystemClock.uptimeMillis() + LOCATION_TIMEOUT_MS
         )
 
-        fusedLocationProviderClient?.lastLocation
-            ?.addOnSuccessListener { loc ->
+        client.lastLocation
+            .addOnSuccessListener { loc ->
+                if (delivered.get()) return@addOnSuccessListener
                 if (loc != null) {
                     deliverOnce(loc)
                 } else {
-                    requestLiveLocation(context, deliverOnce)
+                    liveLocationCallback = requestLiveLocation(context, client, deliverOnce)
                 }
             }
-            ?.addOnFailureListener {
-                requestLiveLocation(context, deliverOnce)
+            .addOnFailureListener {
+                if (delivered.get()) return@addOnFailureListener
+                liveLocationCallback = requestLiveLocation(context, client, deliverOnce)
             }
     }
 
-    private fun requestLiveLocation(context: Context, callback: (Location?) -> Unit) {
+    private fun requestLiveLocation(
+        context: Context,
+        client: FusedLocationProviderClient,
+        callback: (Location?) -> Unit
+    ): LocationCallback? {
         if (!isLocationEnabled(context)) {
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(context, "Device GPS is not enabled", Toast.LENGTH_SHORT).show()
             }
             callback(null)
-            return
+            return null
         }
 
         val locationRequest = LocationRequest.Builder(
@@ -119,25 +132,32 @@ internal object GTILocationUtility {
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             callback(null)
-            return
+            return null
         }
-        fusedLocationProviderClient?.requestLocationUpdates(
-            locationRequest,
-            object : LocationCallback() {
-                override fun onLocationResult(locationResult: LocationResult) {
-                    fusedLocationProviderClient?.removeLocationUpdates(this)
-                    val location = locationResult.lastLocation
-                    callback(location)
-                }
+        val locationCallback = object : LocationCallback() {
+            override fun onLocationResult(locationResult: LocationResult) {
+                client.removeLocationUpdates(this)
+                callback(locationResult.lastLocation)
+            }
 
-                override fun onLocationAvailability(locationAvailability: LocationAvailability) {
-                    if (!locationAvailability.isLocationAvailable) {
-                        Log.d(TAG, "Waiting for a location fix")
-                    }
+            override fun onLocationAvailability(locationAvailability: LocationAvailability) {
+                if (!locationAvailability.isLocationAvailable) {
+                    Log.d(TAG, "Waiting for a location fix")
                 }
-            },
-            Looper.getMainLooper()
-        )
+            }
+        }
+        return runCatching {
+            client.requestLocationUpdates(
+                locationRequest,
+                locationCallback,
+                Looper.getMainLooper()
+            ).addOnFailureListener { callback(null) }
+            locationCallback
+        }.getOrElse {
+            Log.e(TAG, "Unable to request a live location", it)
+            callback(null)
+            null
+        }
     }
 
     private fun isLocationEnabled(context: Context): Boolean {

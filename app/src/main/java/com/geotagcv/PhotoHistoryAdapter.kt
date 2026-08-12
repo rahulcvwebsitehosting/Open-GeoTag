@@ -14,6 +14,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
@@ -24,6 +25,7 @@ class PhotoHistoryAdapter(
 ) : ListAdapter<PhotoRecord, PhotoHistoryAdapter.PhotoViewHolder>(DiffCallback) {
     private val thumbnailExecutor = Executors.newFixedThreadPool(2)
     private val released = AtomicBoolean(false)
+    private val inFlightKeys = ConcurrentHashMap<String, Unit>()
     private val bitmapCache = object : LruCache<String, Bitmap>(cacheSizeKb()) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount / 1024
     }
@@ -44,6 +46,7 @@ class PhotoHistoryAdapter(
     fun release() {
         if (!released.compareAndSet(false, true)) return
         thumbnailExecutor.shutdownNow()
+        inFlightKeys.clear()
         bitmapCache.evictAll()
     }
 
@@ -71,18 +74,24 @@ class PhotoHistoryAdapter(
                 return
             }
 
-            thumbnailExecutor.execute {
-                val bitmap = decodeThumbnail(record)
-                if (released.get()) {
-                    bitmap?.recycle()
-                    return@execute
-                }
-                if (bitmap != null) bitmapCache.put(key, bitmap)
-                binding.ivPhotoThumbnail.post {
-                    if (!released.get() && binding.ivPhotoThumbnail.tag == key && bitmap != null) {
-                        binding.ivPhotoThumbnail.setImageBitmap(bitmap)
+            if (released.get() || inFlightKeys.putIfAbsent(key, Unit) != null) return
+            runCatching {
+                thumbnailExecutor.execute {
+                    val bitmap = decodeThumbnail(record)
+                    inFlightKeys.remove(key)
+                    if (released.get()) {
+                        bitmap?.recycle()
+                        return@execute
+                    }
+                    if (bitmap != null) bitmapCache.put(key, bitmap)
+                    binding.ivPhotoThumbnail.post {
+                        if (!released.get() && binding.ivPhotoThumbnail.tag == key && bitmap != null) {
+                            binding.ivPhotoThumbnail.setImageBitmap(bitmap)
+                        }
                     }
                 }
+            }.onFailure {
+                inFlightKeys.remove(key)
             }
         }
 

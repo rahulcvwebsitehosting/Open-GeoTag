@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="page_horizontal_padding">16dp</dimen>
+    <dimen name="page_top_padding">16dp</dimen>
+    <dimen name="home_headline_text_size">28sp</dimen>
+    <dimen name="home_preview_height">230dp</dimen>
+    <dimen name="template_preview_height">152dp</dimen>
+    <dimen name="template_default_stroke">1dp</dimen>
+    <dimen name="template_selected_stroke">3dp</dimen>
+</resources>

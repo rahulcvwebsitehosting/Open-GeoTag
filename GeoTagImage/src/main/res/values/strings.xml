@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="gti_flash_mode">Flash mode</string>
+    <string name="gti_smart_portrait">Smart • Portrait 4:3</string>
+    <string name="gti_alignment_on">Alignment correction on</string>
+    <string name="gti_level">Level</string>
+    <string name="gti_zoom_default">1.0x</string>
+    <string name="gti_preparing_photo">Getting location and preparing photo…</string>
+    <string name="gti_close_camera">Close camera</string>
+    <string name="gti_take_photo">Take photo</string>
+    <string name="gti_switch_camera">Switch camera</string>
+</resources>
